@@ -216,12 +216,18 @@ ENV LANGUAGE en_US.UTF-8
 ENV LC_ALL en_US.UTF-8
 
 RUN apt-get install -y --no-install-recommends \
-      socat \
-      inotify-tools \
-      python3.11 \
-      python3-pip \
-      qemu-user-static \
-      libpq5 && \
+        inotify-tools \
+        libpq5 \
+        python3.11 \
+        python3-pip \
+        qemu-user-static \
+        socat && \
+    apt-get install -y --no-install-recommends    `# 'CLBOSS dependencies'` \
+        dnsutils \
+        libev-dev \
+        libcurl4-gnutls-dev \
+        libsqlite3-dev && \
+    apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /tmp/lightning_install/ /usr/local/
