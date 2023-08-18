@@ -135,7 +135,7 @@ RUN wget -q --timeout=60 --waitretry=0 --tries=8 https://gmplib.org/download/gmp
     && make install && cd .. && rm gmp-6.1.2.tar.xz && rm -rf gmp-6.1.2
 
 ENV RUST_PROFILE=release
-ENV PATH=$PATH:/root/.cargo/bin/
+ENV PATH=$PATH:/root/.cargo/bin
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 RUN rustup toolchain install stable --component rustfmt --allow-downgrade
 
@@ -246,7 +246,7 @@ USER lightning
 RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
 
-WORKDIR /home/lightning
+WORKDIR "${LIGHTNINGD_DATA%/.lightning}"
 
 VOLUME [ "/home/lightning/.lightning" ]
 EXPOSE 9735 9835
