@@ -145,8 +145,9 @@ RUN cd /tmp && \
     git checkout --recurse-submodules ${LIGHTNINGD_VERSION}
 
 ARG DEVELOPER=1
+ARG EXPERIMENTAL_FEATURES=1
 ENV PYTHON_VERSION=3 \
-      PIP_ROOT_USER_ACTION=ignore
+    PIP_ROOT_USER_ACTION=ignore
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
@@ -165,12 +166,12 @@ RUN cd /tmp/lightning && \
 RUN cd /tmp/lightning && \
     ./configure --prefix=/tmp/lightning_install \
       --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
+      --$( [ ${EXPERIMENTAL_FEATURES} -ne 0 ] && echo enable || echo disable)-experimental-features \
       --disable-address-sanitizer \
       --disable-compat \
       --disable-fuzzing \
       --disable-ub-sanitize \
       --disable-valgrind \
-      --enable-experimental-features \
       --enable-rust \
       --enable-static && \
     make && \
