@@ -1,0 +1,708 @@
+From 7bc9bb8aa440076600a604fbd58d7b5212fc4394 Mon Sep 17 00:00:00 2001
+From: ZmnSCPxj jxPCSnmZ <ZmnSCPxj@protonmail.com>
+Date: Tue, 7 Jun 2022 17:13:18 -0400
+Subject: [PATCH] Boss/Mod/Tally.cpp: Implement `clboss-tally`.
+
+---
+ Boss/Mod/Tally.cpp              | 312 ++++++++++++++++++++++++++++++++
+ Boss/Mod/Tally.hpp              |  32 ++++
+ Boss/Mod/all.cpp                |   4 +
+ ChangeLog                       |   2 +
+ Makefile.am                     |   3 +
+ README.md                       |  34 ++++
+ tests/boss/test_getmanifest.cpp |   2 +
+ tests/boss/test_tally.cpp       | 219 ++++++++++++++++++++++
+ 8 files changed, 608 insertions(+)
+ create mode 100644 Boss/Mod/Tally.cpp
+ create mode 100644 Boss/Mod/Tally.hpp
+ create mode 100644 tests/boss/test_tally.cpp
+
+diff --git a/Boss/Mod/Tally.cpp b/Boss/Mod/Tally.cpp
+new file mode 100644
+index 000000000..0c95f291d
+--- /dev/null
++++ b/Boss/Mod/Tally.cpp
+@@ -0,0 +1,312 @@
++#include"Boss/Mod/Tally.hpp"
++#include"Boss/Msg/CommandRequest.hpp"
++#include"Boss/Msg/CommandResponse.hpp"
++#include"Boss/Msg/DbResource.hpp"
++#include"Boss/Msg/ForwardFee.hpp"
++#include"Boss/Msg/Manifestation.hpp"
++#include"Boss/Msg/ManifestCommand.hpp"
++#include"Boss/Msg/ResponseMoveFunds.hpp"
++#include"Boss/Msg/SwapCompleted.hpp"
++#include"Boss/Msg/TimerTwiceDaily.hpp"
++#include"Boss/concurrent.hpp"
++#include"Ev/Io.hpp"
++#include"Ev/now.hpp"
++#include"Ev/yield.hpp"
++#include"Json/Out.hpp"
++#include"Ln/Amount.hpp"
++#include"S/Bus.hpp"
++#include"Sqlite3.hpp"
++#include"Util/date.hpp"
++#include"Util/make_unique.hpp"
++#include<assert.h>
++
++namespace {
++
++/* How long, in seconds, to keep tally data history.  */
++auto constexpr tally_history_age = double(60.0 * 60.0 * 24.0 * 365.0);
++
++}
++
++namespace Boss { namespace Mod {
++
++class Tally::Impl {
++private:
++	S::Bus& bus;
++	Sqlite3::Db db;
++
++	void start() {
++		bus.subscribe<Msg::DbResource
++			     >([this](Msg::DbResource const& m) {
++			db = m.db;
++			return init();
++		});
++
++		bus.subscribe<Msg::ForwardFee
++			     >([this](Msg::ForwardFee const& m) {
++			return add_tally( "+forwarding_earnings", m.fee
++					, "Total earned from forwarding "
++					  "fees."
++					);
++		});
++		bus.subscribe<Msg::ResponseMoveFunds
++			     >([this](Msg::ResponseMoveFunds const& m) {
++			return add_tally( "-rebalancing_costs", m.fee_spent
++					, "Total lost paying for "
++					  "rebalances."
++					);
++		});
++		bus.subscribe<Msg::SwapCompleted
++			     >([this](Msg::SwapCompleted const& m) {
++			/* SwapCompleted is broadcast while another
++			 * module has a transaction open.
++			 * So do it in the background.
++			 */
++			auto cost = m.amount_sent - m.amount_received;
++			return Boss::concurrent(Ev::lift().then([ this
++								, cost
++								]() {
++				return add_tally( "-inbound_liquidity_swap_costs"
++						, cost
++						, "Total lost buying inbound "
++						  "liquidity using the "
++						  "swap-to-onchain technique."
++						);
++			}));
++		});
++		/* TODO: opening costs, closing costs, liquidity ads
++		 * (earnings from them buying, costs of us buying).  */
++
++		bus.subscribe<Msg::Manifestation
++			     >([this](Msg::Manifestation const&) {
++			return bus.raise(Msg::ManifestCommand{
++				"clboss-cleartally", "",
++				"Clear the tally.",
++				false
++			}) + bus.raise(Msg::ManifestCommand{
++				"clboss-tally", "",
++				"Get the tally of earnings and "
++				"expenditures.",
++				false
++			});
++		});
++		bus.subscribe<Msg::CommandRequest
++			     >([this](Msg::CommandRequest const& m) {
++			if (m.command != "clboss-cleartally")
++				return Ev::lift();
++			auto id = m.id;
++			return db.transact().then([ this
++						  , id
++						  ](Sqlite3::Tx tx) {
++				tx.query_execute(R"QRY(
++				DELETE FROM "Tally";
++				)QRY");
++				tx.query_execute(R"QRY(
++				DELETE FROM "Tally_history";
++				)QRY");
++				tx.commit();
++				return bus.raise(Msg::CommandResponse{
++					id, Json::Out::empty_object()
++				});
++			});
++		});
++		bus.subscribe<Msg::CommandRequest
++			     >([this](Msg::CommandRequest const& m) {
++			if (m.command != "clboss-tally")
++				return Ev::lift();
++			auto id = m.id;
++			return get_tally().then([ this
++						, id
++						](Json::Out res) {
++				return bus.raise(Msg::CommandResponse{
++					id, std::move(res)
++				});
++			});
++		});
++
++		/* Sample the current total and add an entry
++		 * to the "Tally_history" table.
++		 */
++		bus.subscribe<Msg::TimerTwiceDaily
++			     >([this](Msg::TimerTwiceDaily const&) {
++			return sample_total();
++		});
++	}
++
++	Ev::Io<void> init() {
++		return db.transact().then([](Sqlite3::Tx tx) {
++			tx.query_execute(R"QRY(
++			CREATE TABLE IF NOT EXISTS "Tally"
++			     ( name TEXT PRIMARY KEY
++			     , amount INTEGER NOT NULL
++			     , comment TEXT NOT NULL
++			     );
++			CREATE TABLE IF NOT EXISTS "Tally_history"
++			     ( time REAL PRIMARY KEY
++			     , total INTEGER NOT NULL
++			     );
++			)QRY");
++			tx.commit();
++			return Ev::lift();
++		});
++	}
++
++	Ev::Io<void> add_tally( char const* name
++			      , Ln::Amount amount
++			      , char const* comment
++			      ) {
++		assert(name[0] == '+' || name[0] == '-');
++		if (!db)
++			return Ev::yield().then([ this
++						, name, amount, comment
++						]() {
++				return add_tally(name, amount, comment);
++			});
++		return db.transact().then([ name, amount, comment
++					  ](Sqlite3::Tx tx) {
++			auto curr_amount = Ln::Amount::msat(0);
++			auto fetch = tx.query(R"SQL(
++			SELECT amount FROM "Tally"
++			 WHERE name = :name;
++			)SQL")
++				.bind(":name", name)
++				.execute()
++				;
++			for (auto& r : fetch) {
++				curr_amount = Ln::Amount::msat(
++					r.get<std::uint64_t>(0)
++				);
++			}
++			tx.query(R"SQL(
++			INSERT OR REPLACE INTO "Tally"
++			VALUES(:name, :amount, :comment);
++			)SQL")
++				.bind(":name", name)
++				.bind(":amount", (curr_amount + amount).to_msat())
++				.bind(":comment", comment)
++				.execute()
++				;
++			tx.commit();
++
++			return Ev::lift();
++		});
++	}
++
++	Ev::Io<Json::Out> get_tally() {
++		if (!db)
++			return Ev::yield().then([this]() {
++				return get_tally();
++			});
++		return db.transact().then([](Sqlite3::Tx tx) {
++			auto total = std::int64_t(0);
++
++			auto fetch = tx.query(R"QRY(
++			SELECT name, amount, comment FROM "Tally";
++			)QRY").execute();
++			auto result = Json::Out();
++			auto obj = result.start_object();
++			for (auto& r : fetch) {
++				auto name = r.get<std::string>(0);
++				auto amount = Ln::Amount::msat(
++					r.get<std::uint64_t>(1)
++				);
++				auto comment = r.get<std::string>(2);
++				obj.start_object(name)
++					.field("amount", std::string(amount))
++					.field("comment", comment)
++				.end_object();
++				if (name.size() >= 1 && name[0] == '+')
++					total += std::int64_t(
++						amount.to_msat()
++					);
++				else
++					total -= std::int64_t(
++						amount.to_msat()
++					);
++			}
++			obj.field("total", total);
++			obj.field( "comment"
++				 , "Reset all tallies to 0 "
++				   "via `clboss-cleartally`.  "
++				   "This data is purely for node "
++				   "operator and CLBOSS will never "
++				   "use this in its heuristics."
++				 );
++			auto arr = obj.start_array("history");
++			auto fetch2 = tx.query(R"QRY(
++			SELECT time, total FROM "Tally_history"
++			ORDER BY time ASC;
++			)QRY").execute();
++			for (auto& r : fetch2) {
++				auto time = r.get<double>(0);
++				auto total = r.get<std::int64_t>(1);
++				arr.start_object()
++					.field("time", time)
++					.field("time_human", Util::date(time))
++					.field("total", total)
++				.end_object();
++			}
++			arr.end_array();
++			obj.end_object();
++
++			tx.commit();
++			return Ev::lift(std::move(result));
++		});
++	}
++
++	Ev::Io<void> sample_total() {
++		if (!db)
++			return Ev::yield().then([this]() {
++				return sample_total();
++			});
++		return db.transact().then([](Sqlite3::Tx tx) {
++			auto total = std::int64_t(0);
++			auto fetch = tx.query(R"QRY(
++			SELECT name, amount FROM "Tally";
++			)QRY").execute();
++			for (auto& r : fetch) {
++				auto name = r.get<std::string>(0);
++				auto amount = r.get<std::uint64_t>(1);
++				if (name.size() >= 1 && name[0] == '+')
++					total += std::int64_t(amount);
++				else
++					total -= std::int64_t(amount);
++			}
++			tx.query(R"QRY(
++			INSERT OR IGNORE INTO "Tally_history"
++			VALUES(:time, :total);
++			)QRY")
++				.bind(":time", Ev::now())
++				.bind(":total", total)
++				.execute()
++				;
++			tx.query(R"QRY(
++			DELETE FROM "Tally_history"
++			WHERE time < :mintime;
++			)QRY")
++				.bind( ":mintime"
++				     , Ev::now() - tally_history_age
++				     )
++				.execute()
++				;
++			tx.commit();
++
++			return Ev::lift();
++		});
++	}
++
++public:
++	Impl() =delete;
++	Impl(Impl const&) =delete;
++	Impl(Impl&&) =delete;
++
++	explicit
++	Impl(S::Bus& bus_) : bus(bus_) { start(); }
++};
++
++Tally::Tally(Tally&&) =default;
++Tally::~Tally() =default;
++
++Tally::Tally(S::Bus& bus)
++	: pimpl(Util::make_unique<Impl>(bus)) { }
++
++}}
+diff --git a/Boss/Mod/Tally.hpp b/Boss/Mod/Tally.hpp
+new file mode 100644
+index 000000000..30670fa56
+--- /dev/null
++++ b/Boss/Mod/Tally.hpp
+@@ -0,0 +1,32 @@
++#ifndef BOSS_MOD_TALLY_HPP
++#define BOSS_MOD_TALLY_HPP
++
++#include<memory>
++
++namespace S { class Bus; }
++
++namespace Boss { namespace Mod {
++
++/** class Boss::Mod::Tally
++ *
++ * @brief Module to keep track of some msat values.
++ */
++class Tally {
++private:
++	class Impl;
++	std::unique_ptr<Impl> pimpl;
++
++public:
++	Tally() =delete;
++	Tally(Tally const&) =delete;
++
++	Tally(Tally&&);
++	~Tally();
++
++	explicit
++	Tally(S::Bus&);
++};
++
++}}
++
++#endif /* BOSS_MOD_TALLY_HPP */
+diff --git a/Boss/Mod/all.cpp b/Boss/Mod/all.cpp
+index ac530db19..77dd6a87d 100644
+--- a/Boss/Mod/all.cpp
++++ b/Boss/Mod/all.cpp
+@@ -67,6 +67,7 @@
+ #include"Boss/Mod/StatusCommand.hpp"
+ #include"Boss/Mod/SwapManager.hpp"
+ #include"Boss/Mod/SwapReporter.hpp"
++#include"Boss/Mod/Tally.hpp"
+ #include"Boss/Mod/TimerTwiceDailyAnnouncer.hpp"
+ #include"Boss/Mod/Timers.hpp"
+ #include"Boss/Mod/UnmanagedManager.hpp"
+@@ -215,6 +216,9 @@ std::shared_ptr<void> all( std::ostream& cout
+ 	/* Unmanaged nodes.  */
+ 	all->install<UnmanagedManager>(bus);
+ 
++	/* Tally.  */
++	all->install<Tally>(bus);
++
+ 	return all;
+ }
+ 
+diff --git a/ChangeLog b/ChangeLog
+index 4dafd8258..b152efe50 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,5 @@
++- Implement `clboss-tally`, which provides summary on earnings vs.  expenditures for the use of the node operator.
++
+ - Implement `clboss-destroyearningsinfo` to allow older users to recover from `InitialRebalancer` epicness.
+ - Support string "id" fields in the plugin interface.
+ - Disable compiling debug information by default; if you need this, explicitly include `-g` in your `configure` command, like so: `./configure CXXFLAGS="-O2 -g"`.  This reduces binary size by 20x.
+diff --git a/Makefile.am b/Makefile.am
+index d39d41521..9a526ea9f 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -256,6 +256,8 @@ libclboss_la_SOURCES = \
+ 	Boss/Mod/SwapManager.hpp \
+ 	Boss/Mod/SwapReporter.cpp \
+ 	Boss/Mod/SwapReporter.hpp \
++	Boss/Mod/Tally.cpp \
++	Boss/Mod/Tally.hpp \
+ 	Boss/Mod/TimerTwiceDailyAnnouncer.cpp \
+ 	Boss/Mod/TimerTwiceDailyAnnouncer.hpp \
+ 	Boss/Mod/Timers.cpp \
+@@ -594,6 +596,7 @@ TESTS = \
+ 	tests/boss/test_rpc \
+ 	tests/boss/test_stringid \
+ 	tests/boss/test_swapmanager \
++	tests/boss/test_tally \
+ 	tests/boss/test_unmanagedmanager \
+ 	tests/boss/test_version \
+ 	tests/boss/test_waiter_timed \
+diff --git a/README.md b/README.md
+index 62bbec9da..03f5272fa 100644
+--- a/README.md
++++ b/README.md
+@@ -427,3 +427,37 @@ their rebalancing budget, and effectively disable
+ them if the expenditures exceed the earnings, which
+ `InitialRebalancer` notoriously racked up without
+ regard.
++
++### `clboss-tally` / `clboss-cleartally`
++
++`clboss-tally` provides a simple running sum of earnings and
++expenditures that CLBOSS keeps track of.
++This tracking starts in version 0.13B; if you have been
++running older versions, note that the tally will not be
++accurate.
++`clboss-cleartally` will clear the tally.
++
++As of this writing, the tally counts:
++
++* Earnings from successful forwards.
++* Loss from rebalancing.
++* Loss from offchain-to-onchain swaps to get inbound
++  liquidity.
++
++Future versions of CLBOSS should eventually include more
++expenditures in the tally.
++
++In addition to the current tally, `clboss-tally` also
++outputs historical information on the tally total, taken
++twice daily for the past year.
++This historical information is also deleted by
++`clboss-cleartally`.
++
++While `clboss-status` provides earnings information in more
++detail, the data in `clboss-status` is intended to be
++consumed by CLBOSS too.
++The data provided by `clboss-tally` is purely for the
++convenience of the node operator.
++Thus, if for any reason you want to clear the tally, you
++can freely use `clboss-cleartally` without fear of CLBOSS
++potentially misbehaving.
+diff --git a/tests/boss/test_getmanifest.cpp b/tests/boss/test_getmanifest.cpp
+index 5d1ccd9a0..836582746 100644
+--- a/tests/boss/test_getmanifest.cpp
++++ b/tests/boss/test_getmanifest.cpp
+@@ -22,6 +22,8 @@ auto const expected_commands = std::vector<std::string>
+ , "clboss-notice-onchain"
+ , "clboss-unmanage"
+ , "clboss-swaps"
++, "clboss-tally"
++, "clboss-cleartally"
+ };
+ auto const expected_options = std::vector<std::string>
+ { "clboss-min-onchain"
+diff --git a/tests/boss/test_tally.cpp b/tests/boss/test_tally.cpp
+new file mode 100644
+index 000000000..9ed446a2e
+--- /dev/null
++++ b/tests/boss/test_tally.cpp
+@@ -0,0 +1,219 @@
++#undef NDEBUG
++#include"Boss/Mod/Tally.hpp"
++#include"Boss/Msg/CommandRequest.hpp"
++#include"Boss/Msg/CommandResponse.hpp"
++#include"Boss/Msg/DbResource.hpp"
++#include"Boss/Msg/ForwardFee.hpp"
++#include"Boss/Msg/ResponseMoveFunds.hpp"
++#include"Boss/Msg/SwapCompleted.hpp"
++#include"Ev/Io.hpp"
++#include"Ev/start.hpp"
++#include"Ev/yield.hpp"
++#include"Jsmn/Object.hpp"
++#include"Json/Out.hpp"
++#include"Ln/Amount.hpp"
++#include"Ln/NodeId.hpp"
++#include"S/Bus.hpp"
++#include"Sqlite3.hpp"
++#include"Util/make_unique.hpp"
++#include<assert.h>
++#include<cstdint>
++#include<iostream>
++#include<memory>
++#include<sstream>
++
++namespace {
++
++Jsmn::Object to_obj(Json::Out const& o) {
++	auto ss = std::istringstream(o.output());
++	auto rv = Jsmn::Object();
++	ss >> rv;
++	return rv;
++}
++
++auto const A = Ln::NodeId("020000000000000000000000000000000000000000000000000000000000000001");
++auto const B = Ln::NodeId("020000000000000000000000000000000000000000000000000000000000000002");
++
++}
++
++int main() {
++	auto bus = S::Bus();
++	auto db = Sqlite3::Db(":memory:");
++
++	auto mut = Boss::Mod::Tally(bus);
++
++	/* Monitor command responses.  */
++	auto resp = std::unique_ptr<Boss::Msg::CommandResponse>();
++	bus.subscribe< Boss::Msg::CommandResponse
++		     >([&](Boss::Msg::CommandResponse const& m) {
++		resp = Util::make_unique<Boss::Msg::CommandResponse>(m);
++		std::cout << m.response.output() << std::endl;
++		return Ev::lift();
++	});
++
++	auto code = Ev::lift().then([&]() {
++		return bus.raise(Boss::Msg::DbResource{db});
++	}).then([&]() {
++
++		/* Get a tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-tally",
++			Jsmn::Object(),
++			42
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 42);
++		auto r = to_obj(resp->response);
++		assert(r.is_object());
++		assert(r.has("total"));
++		assert(r["total"].is_number());
++		assert(double(r["total"]) == 0.0);
++
++		/* Simulate a couple forwarding events.  */
++		return bus.raise(Boss::Msg::ForwardFee{
++			A, B, Ln::Amount::msat(42), 0.01
++		}) + bus.raise(Boss::Msg::ForwardFee{
++			B, A, Ln::Amount::msat(50), 0.01
++		}) + Ev::yield(42);
++	}).then([&]() {
++		/* Get another tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-tally",
++			Jsmn::Object(),
++			101
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 101);
++		/* Check response contents.  */
++		auto r = to_obj(resp->response);
++		assert(r.is_object());
++		assert(r.has("+forwarding_earnings"));
++		assert(r["+forwarding_earnings"].is_object());
++		assert(r["+forwarding_earnings"].has("amount"));
++		assert(r["+forwarding_earnings"]["amount"].is_string());
++		auto e_s = std::string(r["+forwarding_earnings"]["amount"]);
++		assert(Ln::Amount::valid_string(e_s));
++		auto e = Ln::Amount(e_s);
++		assert(e == (Ln::Amount::msat(42) + Ln::Amount::msat(50)));
++
++		assert(r.has("total"));
++		assert(r["total"].is_number());
++		assert(std::int64_t(double(r["total"])) == (42 + 50));
++
++		/* Simulate a rebalance.  */
++		auto msg = Boss::Msg::ResponseMoveFunds();
++		msg.requester = &mut;
++		msg.amount_moved = Ln::Amount::msat(500000);
++		msg.fee_spent = Ln::Amount::msat(100);
++		return bus.raise(msg);
++	}).then([&]() {
++		/* Get another tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-tally",
++			Jsmn::Object(),
++			202
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 202);
++		/* Check response contents.  */
++		auto r = to_obj(resp->response);
++		assert(r.is_object());
++		assert(r.has("-rebalancing_costs"));
++		assert(r["-rebalancing_costs"].is_object());
++		assert(r["-rebalancing_costs"].has("amount"));
++		assert(r["-rebalancing_costs"]["amount"].is_string());
++		auto c_s = std::string(r["-rebalancing_costs"]["amount"]);
++		assert(Ln::Amount::valid_string(c_s));
++		auto c = Ln::Amount(c_s);
++		assert(c == Ln::Amount::msat(100));
++
++		assert(r.has("total"));
++		assert(r["total"].is_number());
++		assert(std::int64_t(double(r["total"])) == (42 + 50 - 100));
++
++		/* Simulate a swap completion.
++		 * Need to open a transaction because that is how
++		 * a "real" swap would work.
++		 */
++		return db.transact().then([&](Sqlite3::Tx tx) {
++			auto dbtx = std::make_shared<Sqlite3::Tx>(
++				std::move(tx)
++			);
++			return Ev::lift().then([&bus, dbtx]() {
++				auto msg = Boss::Msg::SwapCompleted();
++				msg.dbtx = dbtx;
++				msg.amount_sent = Ln::Amount::msat(500200);
++				msg.amount_received = Ln::Amount::msat(500000);
++				msg.provider_name = "simulation";
++				return bus.raise(msg);
++			}).then([dbtx]() {
++				dbtx->commit();
++				return Ev::yield(42);
++			});
++		});
++	}).then([&]() {
++		/* Get another tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-tally",
++			Jsmn::Object(),
++			303
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 303);
++		/* Check response contents.  */
++		auto r = to_obj(resp->response);
++		assert(r.is_object());
++		assert(r.has("-inbound_liquidity_swap_costs"));
++		assert(r["-inbound_liquidity_swap_costs"].is_object());
++		assert(r["-inbound_liquidity_swap_costs"].has("amount"));
++		assert(r["-inbound_liquidity_swap_costs"]["amount"].is_string());
++		auto c_s = std::string(r["-inbound_liquidity_swap_costs"]["amount"]);
++		assert(Ln::Amount::valid_string(c_s));
++		auto c = Ln::Amount(c_s);
++		assert(c == Ln::Amount::msat(200));
++
++		assert(r.has("total"));
++		assert(r["total"].is_number());
++		assert(std::int64_t(double(r["total"])) == (42 + 50 - 100 - 200));
++
++		/* Clear the tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-cleartally",
++			Jsmn::Object(),
++			404
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 404);
++
++		/* Get another tally.  */
++		resp = nullptr;
++		return bus.raise(Boss::Msg::CommandRequest{
++			"clboss-tally",
++			Jsmn::Object(),
++			505
++		}) + Ev::yield(42);
++	}).then([&]() {
++		assert(resp);
++		assert(resp->id == 505);
++		/* Check response contents.  */
++		auto r = to_obj(resp->response);
++		assert(r.is_object());
++		assert(r.has("total"));
++		assert(r["total"].is_number());
++		assert(std::int64_t(double(r["total"])) == 0);
++
++		return Ev::lift(0);
++	});
++
++	return Ev::start(code);
++}
