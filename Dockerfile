@@ -93,46 +93,26 @@ RUN apt-get install -qq -y --no-install-recommends \
         gettext \
         git \
         gnupg \
-        libpq-dev \
-        libtool \
+        libev-dev \
+        libevent-dev \
         libffi-dev \
-        pkg-config \
+        libgmp-dev \
+        libpq-dev \
+        libsqlite3-dev \
         libssl-dev \
+        libtool \
+        pkg-config \
         protobuf-compiler \
-        python3.11 \
         python3-dev \
         python3-mako \
         python3-pip \
-        python3-venv \
         python3-setuptools \
-        libev-dev \
-        libevent-dev \
+        python3-venv \
+        python3.11 \
         qemu-user-static \
-        wget
-
-RUN wget -q --timeout=60 --waitretry=0 --tries=8 https://zlib.net/fossils/zlib-1.2.13.tar.gz \
-    && tar xvf zlib-1.2.13.tar.gz \
-    && cd zlib-1.2.13 \
-    && ./configure \
-    && make \
-    && make install && cd .. && \
-    rm zlib-1.2.13.tar.gz && \
-    rm -rf zlib-1.2.13
-
-RUN apt-get install -y --no-install-recommends unzip tclsh \
-    && wget -q --timeout=60 --waitretry=0 --tries=8 https://www.sqlite.org/2019/sqlite-src-3290000.zip \
-    && unzip sqlite-src-3290000.zip \
-    && cd sqlite-src-3290000 \
-    && ./configure --enable-static --disable-readline --disable-threadsafe --disable-load-extension \
-    && make \
-    && make install && cd .. && rm sqlite-src-3290000.zip && rm -rf sqlite-src-3290000
-
-RUN wget -q --timeout=60 --waitretry=0 --tries=8 https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz \
-    && tar xvf gmp-6.1.2.tar.xz \
-    && cd gmp-6.1.2 \
-    && ./configure --build=x86_64-pc-linux-gnu --disable-assembly \
-    && make \
-    && make install && cd .. && rm gmp-6.1.2.tar.xz && rm -rf gmp-6.1.2
+        wget\
+        zlib1g \
+        zlib1g-dev
 
 ENV RUST_PROFILE=release
 ENV PATH=$PATH:/root/.cargo/bin
