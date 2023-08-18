@@ -219,13 +219,14 @@ COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY --from=downloader "/tini" /usr/bin/tini
 
 ARG LIGHTNINGD_UID=1001
-ENV LIGHTNINGD_DATA=/home/lightning/.lightning
+ENV LIGHTNINGD_HOME=/home/lightning
+ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning
 ENV LIGHTNINGD_RPC_PORT=9835
 ENV LIGHTNINGD_PORT=9735
 ENV LIGHTNINGD_NETWORK=bitcoin
 
 RUN useradd --no-log-init --user-group \
-      --create-home --home-dir ${LIGHTNINGD_DATA%/.lightning} \
+      --create-home --home-dir ${LIGHTNINGD_HOME} \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning
 
 USER lightning
@@ -233,8 +234,8 @@ USER lightning
 RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
 
-WORKDIR "${LIGHTNINGD_DATA%/.lightning}"
+WORKDIR "${LIGHTNINGD_HOME}"
 
-VOLUME [ "/home/lightning/.lightning" ]
-EXPOSE 9735 9835
+VOLUME "${LIGHTNINGD_DATA}"
+EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT}
 ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "./entrypoint.sh" ]
