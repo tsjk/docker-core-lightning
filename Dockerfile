@@ -157,17 +157,18 @@ RUN cd /tmp && \
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-RUN apt-get install -qq -y --no-install-recommends \
+RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
+    apt-get install -qq -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev \
         dnsutils \
         autoconf-archive && \
     cd /tmp && \
-    git clone https://github.com/ZmnSCPxj/clboss && \
-    cd clboss && \
-    git checkout ${CLBOSS_GIT_HASH} && \
-    [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
+    mkdir clboss && cd clboss && \
+    git init && git remote add origin https://github.com/ZmnSCPxj/clboss && \
+    git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
+    git checkout FETCH_HEAD && \
     ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ) && \
     echo && autoreconf -f -i && \
     ./configure --prefix=/usr/local && \
