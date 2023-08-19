@@ -21,9 +21,9 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     dpkg-reconfigure -f noninteractive locales && \
     update-locale LANG=en_US.UTF-8
 
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 RUN set -ex \
 	&& apt-get update \
@@ -36,36 +36,40 @@ RUN wget -q --timeout=60 --waitretry=0 --tries=8 -O /tini "https://github.com/kr
     && chmod +x /tini
 
 ARG BITCOIN_VERSION=23.0
-ENV BITCOIN_TARBALL bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
-ENV BITCOIN_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/$BITCOIN_TARBALL
-ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SHA256SUMS
+ENV BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
+ENV BITCOIN_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/${BITCOIN_TARBALL} \
+    BITCOIN_ASC_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS
 
 RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
-    && wget -q --timeout=60 --waitretry=0 --tries=8 -O $BITCOIN_TARBALL "$BITCOIN_URL" \
-    && wget -q --timeout=60 --waitretry=0 --tries=8 -O bitcoin "$BITCOIN_ASC_URL" \
-    && grep $BITCOIN_TARBALL bitcoin | tee SHA256SUMS \
+    && wget -q --timeout=60 --waitretry=0 --tries=8 -O ${BITCOIN_TARBALL} "${BITCOIN_URL}" \
+    && wget -q --timeout=60 --waitretry=0 --tries=8 -O bitcoin "${BITCOIN_ASC_URL}" \
+    && grep ${BITCOIN_TARBALL} bitcoin | tee SHA256SUMS \
     && sha256sum -c SHA256SUMS \
-    && BD=bitcoin-$BITCOIN_VERSION/bin \
-    && tar -xzvf $BITCOIN_TARBALL $BD/bitcoin-cli --strip-components=1 \
-    && rm $BITCOIN_TARBALL
+    && BD=bitcoin-${BITCOIN_VERSION}/bin \
+    && tar -xzvf ${BITCOIN_TARBALL} ${BD}/bitcoin-cli --strip-components=1 \
+    && rm ${BITCOIN_TARBALL}
 
-ENV LITECOIN_VERSION 0.21.2.2
-ENV LITECOIN_URL https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz
-ENV LITECOIN_SHA256 d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2
+ENV LITECOIN_VERSION=0.21.2.2
+ENV LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz
+ENV LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
+    LITECOIN_SHA256=d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2
 
 # install litecoin binaries
 RUN mkdir /opt/litecoin && cd /opt/litecoin \
-    && wget -q --timeout=60 --waitretry=0 --tries=8 -O litecoin.tar.gz "$LITECOIN_URL" \
-    && echo "$LITECOIN_SHA256  litecoin.tar.gz" | sha256sum -c - \
-    && BD=litecoin-$LITECOIN_VERSION/bin \
-    && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
-    && rm litecoin.tar.gz
+    && wget -q --timeout=60 --waitretry=0 --tries=8 -O ${LITECOIN_TARBALL} "${LITECOIN_URL}" \
+    && echo "${LITECOIN_SHA256}  ${LITECOIN_TARBALL}" | sha256sum -c - \
+    && BD=litecoin-${LITECOIN_VERSION}/bin \
+    && tar -xzvf ${LITECOIN_TARBALL} ${BD}/litecoin-cli --strip-components=1 --exclude=*-qt \
+    && rm ${LITECOIN_TARBALL}
 
 
 # - builder -
 FROM debian:bookworm-slim as builder
 
-ARG LIGHTNINGD_VERSION=v23.05.2
+ARG LIGHTNINGD_VERSION=v23.05.2 \
+    DEVELOPER=1 \
+    EXPERIMENTAL_FEATURES=1 \
+    CLBOSS_GIT_HASH=ef5c41612da0d544b0ed1f3e986b4b07126723a1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -79,9 +83,9 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     dpkg-reconfigure -f noninteractive locales && \
     update-locale LANG=en_US.UTF-8
 
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -114,37 +118,29 @@ RUN apt-get install -qq -y --no-install-recommends \
         zlib1g \
         zlib1g-dev
 
-ENV RUST_PROFILE=release
-ENV PATH=$PATH:/root/.cargo/bin
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN rustup toolchain install stable --component rustfmt --allow-downgrade
+ENV RUST_PROFILE=release \
+    PATH=$PATH:/root/.cargo/bin
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    rustup toolchain install stable --component rustfmt --allow-downgrade
 
-RUN cd /tmp && \
-    git clone --recursive https://github.com/ElementsProject/lightning && \
-    cd /tmp/lightning && \
-    git checkout --recurse-submodules ${LIGHTNINGD_VERSION}
-
-ARG DEVELOPER=1
-ARG EXPERIMENTAL_FEATURES=1
 ENV PYTHON_VERSION=3 \
     PIP_ROOT_USER_ACTION=ignore
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
+    rm /usr/lib/python3.11/EXTERNALLY-MANAGED && \
+    pip3 install --upgrade pip setuptools wheel && \
+    pip3 wheel cryptography && \
+    pip3 install grpcio-tools
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
-      rm /usr/lib/python3.11/EXTERNALLY-MANAGED
-
-RUN pip3 install --upgrade pip setuptools wheel
-RUN pip3 wheel cryptography
-RUN pip3 install grpcio-tools
-
-RUN cd /tmp/lightning && \
+RUN cd /tmp && \
+    git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
+    cd /tmp/lightning && \
     wget -q --timeout=60 --waitretry=0 --tries=8 \
       -O ./pyproject.toml 'https://raw.githubusercontent.com/ElementsProject/lightning/9f1e1ada2a0274db982a59d912313e3e9684a32b/pyproject.toml' && \
     wget -q --timeout=60 --waitretry=0 --tries=8 \
       -O ./poetry.lock 'https://raw.githubusercontent.com/ElementsProject/lightning/9f1e1ada2a0274db982a59d912313e3e9684a32b/poetry.lock' && \
-    /root/.local/bin/poetry install
-RUN cd /tmp/lightning && \
-    ./configure --prefix=/tmp/lightning_install \
+    /root/.local/bin/poetry install && \
+    ./configure --prefix=/usr/local \
       --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
       --$( [ ${EXPERIMENTAL_FEATURES} -ne 0 ] && echo enable || echo disable)-experimental-features \
       --disable-address-sanitizer \
@@ -155,12 +151,12 @@ RUN cd /tmp/lightning && \
       --enable-rust \
       --enable-static && \
     make && \
-    /root/.local/bin/poetry run make install && \
+    /root/.local/bin/poetry run make DESTDIR=/tmp/lightning_install install && \
     { [ ! -d ./plugin/clnrest ] || pip3 install -r ./plugins/clnrest/requirements.txt; } && \
     { [ ! -d ./contrib/pyln-client ] || pip3 install ./contrib/pyln-client; }
 
 # CLBOSS
-COPY ./clboss-patches /tmp
+COPY ./clboss-patches/ /tmp/clboss-patches/
 RUN apt-get install -qq -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
@@ -170,16 +166,24 @@ RUN apt-get install -qq -y --no-install-recommends \
     cd /tmp && \
     git clone https://github.com/ZmnSCPxj/clboss && \
     cd clboss && \
-    git checkout f4a7715ab7e0480c9b73aa34165ff928e89fc2a2 && \
-    ( for f in /tmp/clboss-patches/*.patch; do patch -p1 < ${f}; done ) && \
-    autoreconf -f -i && \
-    ./configure --prefix=/tmp/clboss_install && \
+    git checkout ${CLBOSS_GIT_HASH} && \
+    [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
+    ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ) && \
+    echo && autoreconf -f -i && \
+    ./configure --prefix=/usr/local && \
     make && \
-    make install
+    make DESTDIR=/tmp/clboss_install install
 
 
 # - final -
 FROM debian:bookworm-slim as final
+
+ARG LIGHTNINGD_UID=1001
+ENV LIGHTNINGD_HOME=/home/lightning
+ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
+    LIGHTNINGD_NETWORK=bitcoin \
+    LIGHTNINGD_RPC_PORT=9835 \
+    LIGHTNINGD_PORT=9735
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
     echo 'Etc/UTC' > /etc/timezone && \
@@ -191,9 +195,9 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     dpkg-reconfigure -f noninteractive locales && \
     update-locale LANG=en_US.UTF-8
 
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 RUN apt-get install -y --no-install-recommends \
         inotify-tools \
@@ -208,26 +212,18 @@ RUN apt-get install -y --no-install-recommends \
         libcurl4-gnutls-dev \
         libsqlite3-dev && \
     apt-get auto-clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    useradd --no-log-init --user-group \
+      --create-home --home-dir ${LIGHTNINGD_HOME} \
+      --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning
 
-COPY --from=builder /tmp/lightning_install/ /usr/local/
+COPY --from=builder /tmp/lightning_install/ /
 COPY --from=builder /tmp/lightning/tools/docker-entrypoint.sh entrypoint.sh
 COPY --from=builder /usr/local/lib/python3.11/dist-packages/ /usr/local/lib/python3.11/dist-packages/
-COPY --from=builder /tmp/clboss_install/ /usr/local/
+COPY --from=builder /tmp/clboss_install/ /
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY --from=downloader "/tini" /usr/bin/tini
-
-ARG LIGHTNINGD_UID=1001
-ENV LIGHTNINGD_HOME=/home/lightning
-ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning
-ENV LIGHTNINGD_RPC_PORT=9835
-ENV LIGHTNINGD_PORT=9735
-ENV LIGHTNINGD_NETWORK=bitcoin
-
-RUN useradd --no-log-init --user-group \
-      --create-home --home-dir ${LIGHTNINGD_HOME} \
-      --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning
 
 USER lightning
 
