@@ -171,7 +171,7 @@ RUN apt-get install -qq -y --no-install-recommends \
     git clone https://github.com/ZmnSCPxj/clboss && \
     cd clboss && \
     git checkout f4a7715ab7e0480c9b73aa34165ff928e89fc2a2 && \
-    ( for f in /tmp/clboss-patches/*.patch; do patch -p1 ${f}; done ) && \
+    ( for f in /tmp/clboss-patches/*.patch; do patch -p1 < ${f}; done ) && \
     autoreconf -f -i && \
     ./configure --prefix=/tmp/clboss_install && \
     make && \
