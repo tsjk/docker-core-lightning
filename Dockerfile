@@ -6,11 +6,10 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 
 # - downloader -
-FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as downloader
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as downloader
 
+ARG BUILDPLATFORM
 ARG TARGETPLATFORM
-ARG TARGETARCH
-ARG TARGETVARIANT
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -36,11 +35,11 @@ WORKDIR /opt
 
 # install tini binary
 ENV TINI_VERSION=v0.18.0
-RUN { case ${TARGETPLATFORM} in \
+RUN { case ${TARGETPLATFORM:-${BUILDPLATFORM}} in \
          "linux/amd64")  TINI_ARCH=amd64; TINI_SHA256SUM=eadb9d6e2dc960655481d78a92d2c8bc021861045987ccd3e27c7eae5af0cf33  ;; \
          "linux/arm64")  TINI_ARCH=arm64; TINI_SHA256SUM=ce3f642d73d58d7c8d745e65b5a9b5de7040fbfa1f7bee2f6207bb28207d8ca1  ;; \
          "linux/arm/v7") TINI_ARCH=armhf; TINI_SHA256SUM=efc2933bac3290aae1180a708f58035baf9f779833c2ea98fcce0ecdab68aa61  ;; \
-         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM:-${BUILDPLATFORM}}."; exit 1  ;; \
       esac; } \
     && wget -q --timeout=60 --waitretry=0 --tries=8 -O /tini \
          "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-static-${TINI_ARCH}" \
@@ -49,11 +48,11 @@ RUN { case ${TARGETPLATFORM} in \
 
 # install bitcoin binaries
 ARG BITCOIN_VERSION=23.0
-RUN { case ${TARGETPLATFORM} in \
+RUN { case ${TARGETPLATFORM:-${BUILDPLATFORM}} in \
          "linux/amd64")  BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
          "linux/arm64")  BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
          "linux/arm/v7") BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-arm-linux-gnueabihf.tar.gz  ;; \
-         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM:-${BUILDPLATFORM}}."; exit 1  ;; \
       esac; } \
     && BITCOIN_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/${BITCOIN_TARBALL} \
     && BITCOIN_ASC_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
@@ -68,14 +67,14 @@ RUN { case ${TARGETPLATFORM} in \
 
 # install litecoin binaries
 ENV LITECOIN_VERSION=0.21.2.2
-RUN { case ${TARGETPLATFORM} in \
+RUN { case ${TARGETPLATFORM:-${BUILDPLATFORM}} in \
          "linux/amd64")  LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz; \
                          LITECOIN_SHA256=d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2  ;; \
          "linux/arm64")  LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-aarch64-linux-gnu.tar.gz; \
                          LITECOIN_SHA256=cd2fb921bdd4386380ea9b9cb949d37f17764eaac89b268751da5ac99e8003c1  ;; \
          "linux/arm/v7") LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-arm-linux-gnueabihf.tar.gz; \
                          LITECOIN_SHA256=debd14da7796dcf9bb96ca0e2c7ca3bc6a4d5907b5b9e2950e66d0980a96610b  ;; \
-         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM:-${BUILDPLATFORM}}."; exit 1  ;; \
       esac; } \
     && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
     && mkdir /opt/litecoin && cd /opt/litecoin \
@@ -87,7 +86,7 @@ RUN { case ${TARGETPLATFORM} in \
 
 
 # - builder -
-FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as builder
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
@@ -200,7 +199,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 
 
 # - final -
-FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as final
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as final
 
 ARG LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
