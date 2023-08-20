@@ -7,7 +7,11 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 
 # - downloader -
-FROM debian:bookworm-slim as downloader
+FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as downloader
+
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG TARGETVARIANT
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -31,16 +35,32 @@ RUN set -ex \
 
 WORKDIR /opt
 
-RUN wget -q --timeout=60 --waitretry=0 --tries=8 -O /tini "https://github.com/krallin/tini/releases/download/v0.18.0/tini" \
-    && echo "12d20136605531b09a2c2dac02ccee85e1b874eb322ef6baf7561cd93f93c855 /tini" | sha256sum -c - \
+# install tini binary
+ENV TINI_VERSION=v0.18.0
+RUN RUN case ${TARGETPLATFORM} in \
+         "linux/amd64")  TINI_ARCH=amd64  ;; \
+         "linux/arm64")  TINI_ARCH=arm64  ;; \
+         "linux/arm/v7") TINI_ARCH=armhf  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM."; exit 1  ;; \
+    esac \
+    && wget -q --timeout=60 --waitretry=0 --tries=8 -O /tini \
+         "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${TINI_ARCH}" \
+    && wget -q --timeout=60 --waitretry=0 --tries=8 -O /tini.sha256sum \
+         "https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${TINI_ARCH}.sha256sum" \
+    && echo "$(cut -d ' ' -f 1 /tini.sha256sum) /tini" | sha256sum -c - \
     && chmod +x /tini
 
+# install bitcoin binaries
 ARG BITCOIN_VERSION=23.0
-ENV BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
-ENV BITCOIN_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/${BITCOIN_TARBALL} \
-    BITCOIN_ASC_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS
-
-RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
+RUN case ${TARGETPLATFORM} in \
+         "linux/amd64")  BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
+         "linux/arm64")  BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
+         "linux/arm/v7") BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-arm-linux-gnueabihf.tar.gz  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM."; exit 1  ;; \
+    esac \
+    && BITCOIN_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/${BITCOIN_TARBALL} \
+    && BITCOIN_ASC_URL=https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
+    && mkdir /opt/bitcoin && cd /opt/bitcoin \
     && wget -q --timeout=60 --waitretry=0 --tries=8 -O ${BITCOIN_TARBALL} "${BITCOIN_URL}" \
     && wget -q --timeout=60 --waitretry=0 --tries=8 -O bitcoin "${BITCOIN_ASC_URL}" \
     && grep ${BITCOIN_TARBALL} bitcoin | tee SHA256SUMS \
@@ -49,13 +69,19 @@ RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
     && tar -xzvf ${BITCOIN_TARBALL} ${BD}/bitcoin-cli --strip-components=1 \
     && rm ${BITCOIN_TARBALL}
 
-ENV LITECOIN_VERSION=0.21.2.2
-ENV LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz
-ENV LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
-    LITECOIN_SHA256=d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2
-
 # install litecoin binaries
-RUN mkdir /opt/litecoin && cd /opt/litecoin \
+ENV LITECOIN_VERSION=0.21.2.2
+RUN case ${TARGETPLATFORM} in \
+         "linux/amd64")  LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz; \
+                         LITECOIN_SHA256=d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2  ;; \
+         "linux/arm64")  LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-aarch64-linux-gnu.tar.gz; \
+                         LITECOIN_SHA256=cd2fb921bdd4386380ea9b9cb949d37f17764eaac89b268751da5ac99e8003c1  ;; \
+         "linux/arm/v7") LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-arm-linux-gnueabihf.tar.gz; \
+                         LITECOIN_SHA256=debd14da7796dcf9bb96ca0e2c7ca3bc6a4d5907b5b9e2950e66d0980a96610b  ;; \
+         *) echo "ERROR: Unsupported TARGETPLATFORM."; exit 1  ;; \
+    esac \
+    && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL}; \
+    && mkdir /opt/litecoin && cd /opt/litecoin \
     && wget -q --timeout=60 --waitretry=0 --tries=8 -O ${LITECOIN_TARBALL} "${LITECOIN_URL}" \
     && echo "${LITECOIN_SHA256}  ${LITECOIN_TARBALL}" | sha256sum -c - \
     && BD=litecoin-${LITECOIN_VERSION}/bin \
@@ -64,7 +90,7 @@ RUN mkdir /opt/litecoin && cd /opt/litecoin \
 
 
 # - builder -
-FROM debian:bookworm-slim as builder
+FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as builder
 
 ARG LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
@@ -177,7 +203,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 
 
 # - final -
-FROM debian:bookworm-slim as final
+FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as final
 
 ARG LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
