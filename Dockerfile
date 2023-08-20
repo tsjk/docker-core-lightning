@@ -6,7 +6,7 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 
 # - downloader -
-FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as downloader
+FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as downloader
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -87,7 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 
 
 # - builder -
-FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as builder
+FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as builder
 
 ARG LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
@@ -200,7 +200,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 
 
 # - final -
-FROM --platform=${BUILDPLATFORM} debian:bookworm-slim as final
+FROM --platform=${TARGETPLATFORM} debian:bookworm-slim as final
 
 ARG LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
