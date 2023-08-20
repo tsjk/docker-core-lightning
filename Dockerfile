@@ -119,6 +119,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         gettext \
         git \
         gnupg \
+        libc-dev\
         libev-dev \
         libevent-dev \
         libffi-dev \
@@ -139,6 +140,14 @@ RUN apt-get install -qq -y --no-install-recommends \
         wget\
         zlib1g \
         zlib1g-dev
+
+RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
+    wget -q --timeout=60 --waitretry=0 --tries=8 -O su-exec.c "https://raw.githubusercontent.com/ncopa/su-exec/master/su-exec.c" && \
+    mkdir -p /tmp/su-exec_install/usr/local/bin && \
+    SUEXEC_BINARY="/tmp/su-exec_install/usr/local/bin/su-exec" && \
+    gcc -Wall su-exec.c -o"${SUEXEC_BINARY}" && \
+    chown root:root "${SUEXEC_BINARY}" && \
+    chmod 0755 "${SUEXEC_BINARY}"
 
 ENV RUST_PROFILE=release \
     PATH=$PATH:/root/.cargo/bin
@@ -240,6 +249,7 @@ RUN apt-get install -y --no-install-recommends \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning
 
+COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
 COPY --from=builder /tmp/lightning/tools/docker-entrypoint.sh entrypoint.sh
 COPY --from=builder /usr/local/lib/python3.11/dist-packages/ /usr/local/lib/python3.11/dist-packages/
