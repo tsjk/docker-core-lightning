@@ -87,7 +87,8 @@ RUN { case ${TARGETPLATFORM} in \
 # - builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
-ARG LIGHTNINGD_VERSION=v23.05.2 \
+ARG MAKE_NPROC=0 \
+    LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
     EXPERIMENTAL_FEATURES=1 \
     CLBOSS_GIT_HASH=ef5c41612da0d544b0ed1f3e986b4b07126723a1
@@ -171,7 +172,7 @@ RUN cd /tmp && \
       --disable-valgrind \
       --enable-rust \
       --enable-static && \
-    make && \
+    make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
     /root/.local/bin/poetry run make DESTDIR=/tmp/lightning_install install && \
     { [ ! -d ./plugin/clnrest ] || pip3 install -r ./plugins/clnrest/requirements.txt; } && \
     { [ ! -d ./contrib/pyln-client ] || pip3 install ./contrib/pyln-client; }
@@ -193,7 +194,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
     ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ) && \
     echo && autoreconf -f -i && \
     ./configure --prefix=/usr/local && \
-    make && \
+    make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
     make DESTDIR=/tmp/clboss_install install
 
 
