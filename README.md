@@ -1,5 +1,5 @@
 # docker-core-lightning
-Dockerfile with multi-platorm support for building a container with core-lightning and clboss.
+Dockerfile with multi-platorm support (linux/amd64, linux/arm64, and linux/arm32v7) for building a container with core-lightning and clboss.
 
 # Status
 This is a work in progress, but it might already be useful - for inspiration at least.
