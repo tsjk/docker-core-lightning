@@ -231,6 +231,9 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
+#COPY --from=builder /tmp/lightning/tools/docker-entrypoint.sh /entrypoint.sh
+COPY ./entrypoint.sh /entrypoint.sh
+
 RUN apt-get install -y --no-install-recommends \
         inotify-tools \
         libpq5 \
@@ -245,6 +248,7 @@ RUN apt-get install -y --no-install-recommends \
         libsqlite3-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
+    chmod 0755 /entrypoint.sh && \
     useradd --no-log-init --user-group \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning && \
@@ -255,7 +259,6 @@ RUN apt-get install -y --no-install-recommends \
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
-COPY --from=builder /tmp/lightning/tools/docker-entrypoint.sh entrypoint.sh
 COPY --from=builder /usr/local/lib/python3.11/dist-packages/ /usr/local/lib/python3.11/dist-packages/
 COPY --from=builder /tmp/clboss_install/ /
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
