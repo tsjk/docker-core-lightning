@@ -52,8 +52,10 @@ Make it executable:
 
 Unregister any existing QEMU binfmts (as root):
 
-`# ( for f in /proc/sys/fs/binfmt_misc/qemu-*; do \
-       [[ ! -e "${f}" ]] || echo '-1' > "${f}"; done )`
+```
+# ( for f in /proc/sys/fs/binfmt_misc/qemu-*; do \
+       [[ ! -e "${f}" ]] || echo '-1' > "${f}"; done )
+```
 
 Register the new QEMU binfmts using `qemu-binfmt-conf.sh` (as root):
 
@@ -61,8 +63,10 @@ Register the new QEMU binfmts using `qemu-binfmt-conf.sh` (as root):
 
 If your QEMU is statically built you might need to instead run (as root):
 
-`# ./qemu-binfmt-conf.sh --qemu-suffix -static \
-     --qemu-path /usr/bin --persistent yes`
+```
+# ./qemu-binfmt-conf.sh --qemu-suffix -static \
+     --qemu-path /usr/bin --persistent yes
+```
 
 In the above it's assumed that your QEMU binaries reside in `/usr/bin`. If they
 do not, you'll need to adjust the `--qemu-path` parameter.
@@ -78,8 +82,9 @@ Contrary to the usual non-containarized case, you'll want to set
 E.g. `bind-addr=0.0.0.0:9735`.
 
 The access to this port is then restricted by the way you map this
-conainer port. For example, adding a `-p 127.0.0.1:9735:9735` will only allow
-access to that port via the host's loopback interface.
+conainer port. For example, adding a `-p 127.0.0.1:9735:9735` to the
+`docker run` command will only allow access to that port via the host's
+loopback interface.
 
 If you aim to be connectable via clearnet, allowing wide access to that port
 by binding it to your network interface - or all interfaces
@@ -95,7 +100,8 @@ maeke that port accessible to whatever should be able to access it.
 ## Exposing Core Lightning's RPC socket
 By setting the docker environment variable `EXPOSE_TCP_RPC` to `true`
 a socat process is started that maps Core Lightning's RPC socket to
-TCP port 9835. This port can the be exposed
+TCP port 9835. This port can the be exposed by adding a
+`-p 127.0.0.1:9835:9835` to the `docker run` command.
 
 ## Wiring stuff in
 To run, you'll need to wire in a few things.
@@ -154,6 +160,19 @@ needed in this case.
 Depending on which solution you need, you'll need to set
 `addr` to point to the control port of the Tor daemon and `proxy` to its socks
 port.
+
+## docker run example (for the Debian-based x86_64 image)
+```
+$ docker run --name core-lightning --restart=no --network=bridge -d \
+    -e EXPOSE_TCP_RPC=true \
+    -v "${HOME}/.lightning":"/home/lightning/.lightning" \
+    -p 127.0.0.1:9835:9835 -p 0.0.0.0:9735:9735 \
+    --add-host=host.docker.internal:host-gateway \
+    -e NETWORK_RPCD=host.docker.internal:8332 \
+    -e TOR_SOCKSD=host.docker.internal:9050 \
+    -e TOR_CTRLD=host.docker.internal:9150 \
+    local/core-lightning:amd64-latest
+```
 
 ## docker-compose
 There is a `docker-compose.xml` that can be used for inspiration.
