@@ -247,7 +247,11 @@ RUN apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/* && \
     useradd --no-log-init --user-group \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
-      --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning
+      --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning && \
+    mkdir "${LIGHTNINGD_DATA}" && \
+    touch "${LIGHTNINGD_DATA}/config" && \
+    chown -R lightning:lightning "${LIGHTNINGD_DATA}"
+
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
@@ -258,13 +262,9 @@ COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY --from=downloader "/tini" /usr/bin/tini
 
-USER lightning
-
-RUN mkdir $LIGHTNINGD_DATA && \
-    touch $LIGHTNINGD_DATA/config
-
 WORKDIR "${LIGHTNINGD_HOME}"
 
 VOLUME "${LIGHTNINGD_DATA}"
 EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT}
 ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "./entrypoint.sh" ]
+CMD ["lightningd"]
