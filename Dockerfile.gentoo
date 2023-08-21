@@ -34,14 +34,14 @@ RUN	   echo -e "\nFEATURES=\"-ipc-sandbox -mount-sandbox -network-sandbox -pid-s
 		sys-fs/inotify-tools\
 	&& rm -rf /var/cache/distfiles /var/db/repos/gentoo
 
-COPY ./entrypoint.sh.gentoo /entrypoint.sh
-
+ENV	LIGHTNINGD_HOME=/var/lib/lightning
 ENV \
-	LIGHTNINGD_DATA=/var/lib/lightning\
+	LIGHTNINGD_DATA=${LIGHTNINGD_HOME}\
+	LIGHTNINGD_NETWORK=bitcoin\
 	LIGHTNINGD_RPC_PORT=9835\
-	LIGHTNINGD_PORT=9735\
-	LIGHTNINGD_NETWORK=bitcoin
+	LIGHTNINGD_PORT=9735
 
+COPY ./entrypoint.sh /entrypoint.sh
 RUN	   chmod 0755 /entrypoint.sh\
 	&& mkdir -p "${LIGHTNINGD_DATA}"\
 	&& touch "${LIGHTNINGD_DATA}/config"
