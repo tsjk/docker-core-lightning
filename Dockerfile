@@ -215,7 +215,10 @@ ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     LIGHTNINGD_NETWORK=bitcoin \
     LIGHTNINGD_RPC_PORT=9835 \
-    LIGHTNINGD_PORT=9735
+    LIGHTNINGD_PORT=9735 \
+    TOR_SOCKSD="" \
+    TOR_CTRLD="" \
+    NETWORK_RPCD=""
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
     echo 'Etc/UTC' > /etc/timezone && \

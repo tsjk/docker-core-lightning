@@ -25,6 +25,19 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
   p="${LIGHTNINGD}"; shift 1
 
+  [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 `cat /tmp/socat-network_rpc.pid` > /dev/null 2>&1; } || {
+      rm -f /tmp/socat-network_rpc.lock /tmp/socat-network_rpc.pid
+      su -s /bin/sh lightning -c "exec /usr/bin/socat -L /tmp/socat-network_rpc.lock TCP4-LISTEN:8332,bind=127.0.0.1,reuseaddr,fork TCP4:${NETWORK_RPCD}" &
+      echo $! > /tmp/socat-network_rpc.pid; }
+  [[ -z "${TOR_SOCKSD}" ]] || { [[ -e /tmp/socat-tor_socks.lock ]] && [[ -e /tmp/socat-tor_socks.pid ]] && kill -0 `cat /tmp/socat-tor_socks.pid` > /dev/null 2>&1; } || {
+      rm -f /tmp/socat-tor_socks.lock /tmp/socat-tor_socks.pid
+      su -s /bin/sh lightning -c "exec /usr/bin/socat -L /tmp/socat-tor_socks.lock TCP4-LISTEN:9050,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_SOCKSD}" &
+      echo $! > /tmp/socat-tor_socks.pid; }
+  [[ -z "${TOR_CTRLD}" ]] || { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 `cat /tmp/socat-tor_ctrl.pid` > /dev/null 2>&1; } || {
+      rm -f /tmp/socat-tor_ctrl.lock /tmp/socat-tor_ctrl.pid
+      su -s /bin/sh lightning -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" &
+      echo $! > /tmp/socat-tor_ctrl.pid; }
+
   if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
     set -m
 
