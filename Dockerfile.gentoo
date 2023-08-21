@@ -46,9 +46,9 @@ RUN	   chmod 0755 /entrypoint.sh\
 	&& mkdir -p "${LIGHTNINGD_DATA}"\
 	&& touch "${LIGHTNINGD_DATA}/config"
 
-VOLUME [ "/var/lib/lightning" ]
+VOLUME "${LIGHTNINGD_HOME}"
 
-EXPOSE 9735 9835
+EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT}
 
 ENTRYPOINT [ "/usr/bin/tini", "-g", "--", "/entrypoint.sh" ]
 
