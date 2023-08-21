@@ -4,19 +4,26 @@
 : "${EXPOSE_TCP_RPC:=false}"
 
 networkdatadir="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
+if [[ -x "/usr/bin/lightningd" ]]; then
+  LIGHTNINGD="/usr/bin/lightningd"
+else
+  LIGHTNINGD="/usr/local/bin/lightningd"
+fi
 
 if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
-  set -- /usr/bin/lightningd  "${@:2}"; fi
+  set -- "${LIGHTNINGD}" "${@:2}"; fi
 
-if [[ "${1}" == "/usr/bin/lightningd" ]]; then
+if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then
-    gruopmod --non-unique --gid ${PGID} lightning && usermod --non-unique --uid ${PUID} lightning || exit 1; fi
-  [[ "${DO_CHOWN}" != "true" ]] || chown -R lightning:lightning "/var/lib/lightning" || exit 1
+    { [[ $(getent group lightning | cut -d ':' -f 3) -eq ${PGID} ]] || gruopmod --non-unique --gid ${PGID} lightning; } && \
+    { [[ $(getent passwd lightning | cut -d ':' -f 3) -eq ${PUID} ]] || usermod --non-unique --uid ${PUID} lightning; } || exit 1; fi
+  [[ "${DO_CHOWN}" != "true" ]] || \
+    { [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}"; } || exit 1
 
-  p="/usr/bin/lightningd"; shift 1
+  p="${LIGHTNINGD}"; shift 1
 
   if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
     set -m
