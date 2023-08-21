@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  bitcoind:
+    build: "."
+    image: core-lightning
+    container_name: core-lightning
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 127.0.0.1:9835:9835
+      - 0.0.0.0:9735:9735
+    volumes:
+      - lightning:/home/lightning/.lightning
+    environment:
+      NETWORK_RPCD: "host.docker.internal:8332"
+      TOR_SOCKSD: "host.docker.internal:9050"
+      TOR_CTRLD: "host.docker.internal:9051"
+    stop_grace_period: 2m
+    restart: "no"
