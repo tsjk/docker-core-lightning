@@ -61,7 +61,8 @@ Register the new QEMU binfmts using `qemu-binfmt-conf.sh` (as root):
 
 `# ./qemu-binfmt-conf.sh --qemu-path /usr/bin --persistent yes`
 
-If your QEMU is statically built you might need to instead run (as root):
+If your QEMU user emulation binaries have been statically built you might need
+to instead run (as root):
 
 ```
 # ./qemu-binfmt-conf.sh --qemu-suffix -static \
@@ -95,7 +96,7 @@ Setting `bind-addr=127.0.0.1` in the container's `lightningd.conf` will make
 the core lightning daemon only bind to the container's loopback interface.
 
 That is a valid setting, but then extra steps need to be taken in order to
-maeke that port accessible to whatever should be able to access it.
+make that port accessible to whatever should be able to access it.
 
 ## Exposing Core Lightning's RPC socket
 By setting the docker environment variable `EXPOSE_TCP_RPC` to `true`
@@ -182,6 +183,13 @@ To use clboss, add
 
 `plugin=/usr/local/bin/clboss`
 
-together with other clboss configuration (if any) to your wired-in core lightnin
-g config. Remember that clboss is included in the image, and so `/usr/local/bin/
-clboss` is not referring to your local filesystem.
+together with other clboss configuration (if any) to your wired-in core
+lightning config. Remember that clboss is included in the image, and so
+`/usr/local/bin/clboss` is not referring to your local filesystem.
+
+## Future work (feel free to make pull requests)
+* Add sensible `lightningd.conf` that should work out of the box.
+* Add and auto-setup RTL for easy interaction with Core Lightning.
+* Add images to image repository for others to download.
+* Add reference to containerized Bitcoin daemon and provide instructions for interoperation.
+* Add reference to containerized Tor daemon and provide instructions for interoperation.
