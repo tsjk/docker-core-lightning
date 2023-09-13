@@ -1,15 +1,3 @@
-From 7f2d39cc581d6d35a9226917d960262c3a9b08b3 Mon Sep 17 00:00:00 2001
-From: ZmnSCPxj jxPCSnmZ <ZmnSCPxj@protonmail.com>
-Date: Tue, 7 Jun 2022 21:57:53 -0400
-Subject: [PATCH] Boss/Mod/EarningsTracker.cpp: Implement
- `clboss-destroyearningsinfo` command.
-
----
- Boss/Mod/EarningsTracker.cpp | 34 ++++++++++++++++++++++++++++++++++
- ChangeLog                    |  1 +
- README.md                    | 22 ++++++++++++++++++++++
- 3 files changed, 57 insertions(+)
-
 diff --git a/Boss/Mod/EarningsTracker.cpp b/Boss/Mod/EarningsTracker.cpp
 index 87a7148b5..ebf8a0e2f 100644
 --- a/Boss/Mod/EarningsTracker.cpp
@@ -62,42 +50,3 @@ index 87a7148b5..ebf8a0e2f 100644
  	}
  
  	Ev::Io<void> init() {
-diff --git a/ChangeLog b/ChangeLog
-index d7ca1fc3d..192144947 100644
---- a/ChangeLog
-+++ b/ChangeLog
-@@ -1,3 +1,4 @@
-+- Implement `clboss-destroyearningsinfo` to allow older users to recover from `InitialRebalancer` epicness.
- - Support string "id" fields in the plugin interface.
- - Disable compiling debug information by default; if you need this, explicitly include `-g` in your `configure` command, like so: `./configure CXXFLAGS="-O2 -g"`.  This reduces binary size by 20x.
- - Enable SQLITE3 extended error codes.
-diff --git a/README.md b/README.md
-index 23aac64eb..1b87af135 100644
---- a/README.md
-+++ b/README.md
-@@ -405,3 +405,25 @@ Specify the value in satoshis without adding any unit
- suffix, e.g.
- 
-     lightningd --clboss-min-channel=1000000
-+
-+### `clboss-destroyearningsinfo`
-+
-+If you have been using CLBOSS in 2022 or earlier, you
-+may have been running using the very old and very
-+economically irrational `InitialRebalancer`.
-+
-+While CLBOSS v0.13A has disabled `InitialRebalancer`,
-+the side-effects of `InitialRebalancer` will effectively
-+prevent other rebalancers such as `EarningsRebalancer`
-+and `InitialRebalancer` from working.
-+
-+To reset this, execute the `clboss-destroyearningsinfo`
-+exactly once.
-+
-+Executing this command destroys the data in the
-+`offchain_earnings_tracker` key of `clboss-status`,
-+which is used by the other rebalancers to determine
-+their rebalancing budget, and effectively disable
-+them if the expenditures exceed the earnings, which
-+`InitialRebalancer` notoriously racked up without
-+regard.
