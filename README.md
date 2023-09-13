@@ -107,7 +107,7 @@ TCP port 9835. This port can the be exposed by adding a
 ## Wiring stuff in
 To run, you'll need to wire in a few things.
 
-### Persistant storage
+### Persistent storage
 Assuming that the Debian-based image is used, mapping a host directory to
 `/home/lightning/.lightning` in the container is sufficient.
 E.g., by adding a
