@@ -14,7 +14,16 @@ if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
-  set -- "${LIGHTNINGD}" "${@:2}"; fi
+  for a; do [[ "${a}" =~ ^--conf=.*$ ]] && config_file="${a##--conf=}"; done
+  [[ -z "${config_file}" || -f "${config_file}" ]] || exit 1
+  if [[ -n "${config_file}" ]]; then
+    set -- "${LIGHTNINGD}" "${@:2}"
+  else
+    [[ -f "${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" ]] && \
+      config_file="${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" || exit 1
+    set -- "${LIGHTNINGD}" --conf="${config_file}" "${@:2}"
+  fi
+fi
 
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then

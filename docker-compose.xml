@@ -13,6 +13,7 @@ services:
       - 0.0.0.0:9735:9735
     volumes:
       - lightning:/home/lightning/.lightning
+      - config:/home/lightning/.config/lightning
     environment:
       NETWORK_RPCD: "host.docker.internal:8332"
       TOR_SOCKSD: "host.docker.internal:9050"
