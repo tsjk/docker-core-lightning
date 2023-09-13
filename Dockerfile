@@ -272,5 +272,5 @@ WORKDIR "${LIGHTNINGD_HOME}"
 
 VOLUME "${LIGHTNINGD_DATA}"
 EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT}
-ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "./entrypoint.sh" ]
+ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "/entrypoint.sh" ]
 CMD ["lightningd"]
