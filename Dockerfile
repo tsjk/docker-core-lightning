@@ -91,7 +91,8 @@ ARG MAKE_NPROC=0 \
     LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
     EXPERIMENTAL_FEATURES=1 \
-    CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6
+    CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6 \
+    C_LIGHTNING_REST_VERSION=0.10.3
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -206,6 +207,20 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
     make DESTDIR=/tmp/clboss_install install
 
+# c-lightning-REST
+RUN apt-get install -qq -y --no-install-recommends \
+        nodejs npm && \
+    mkdir -p /tmp/c-lightning-REST_install/usr/local && \
+    cd /tmp/c-lightning-REST_install/usr/local && \
+    wget -q --timeout=60 --waitretry=0 --tries=8 \
+      -O ./c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz \
+      "https://github.com/Ride-The-Lightning/c-lightning-REST/archive/refs/tags/v${C_LIGHTNING_REST_VERSION}.tar.gz" && \
+    tar xf c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
+    rm c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
+    mv c-lightning-REST-${C_LIGHTNING_REST_VERSION} c-lightning-REST && \
+    cd c-lightning-REST && \
+    npm install --omit=dev
+
 
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as final
@@ -216,6 +231,8 @@ ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     LIGHTNINGD_NETWORK=bitcoin \
     LIGHTNINGD_RPC_PORT=9835 \
     LIGHTNINGD_PORT=9735 \
+    C_LIGHTNING_REST_PORT=49836 \
+    C_LIGHTNING_REST_DOCPORT=49837 \
     TOR_SOCKSD="" \
     TOR_CTRLD="" \
     NETWORK_RPCD=""
@@ -234,8 +251,8 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-#COPY --from=builder /tmp/lightning/tools/docker-entrypoint.sh /entrypoint.sh
 COPY ./entrypoint.sh /entrypoint.sh
+COPY --from=builder /tmp/c-lightning-REST_install/ /
 
 RUN apt-get install -y --no-install-recommends \
         inotify-tools \
@@ -249,14 +266,22 @@ RUN apt-get install -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev && \
+    apt-get install -y --no-install-recommends    `# 'c-lightning-REST dependencies'` \
+        nodejs && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
     chmod 0755 /entrypoint.sh && \
     useradd --no-log-init --user-group \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning && \
+    mkdir -p "${LIGHTNINGD_HOME}/.config/lightning" && \
+    touch "${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" && \
+    mkdir -p "${LIGHTNINGD_HOME}/.config/c-lightning-REST" && \
+    ( cd /usr/local/c-lightning-REST && \
+        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
+        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json/certs" ) && \
+    chown -R lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
-    touch "${LIGHTNINGD_DATA}/config" && \
     chown -R lightning:lightning "${LIGHTNINGD_DATA}"
 
 
@@ -270,7 +295,10 @@ COPY --from=downloader "/tini" /usr/bin/tini
 
 WORKDIR "${LIGHTNINGD_HOME}"
 
+VOLUME "${LIGHTNINGD_HOME}/.config/lightning"
+VOLUME "${LIGHTNINGD_HOME}/.config/c-lightning-REST"
 VOLUME "${LIGHTNINGD_DATA}"
-EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT}
+EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT} ${C_LIGHTNING_REST_PORT} ${C_LIGHTNING_REST_DOCPORT}
+
 ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "/entrypoint.sh" ]
 CMD ["lightningd"]
