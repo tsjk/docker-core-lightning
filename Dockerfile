@@ -92,7 +92,8 @@ ARG MAKE_NPROC=0 \
     DEVELOPER=1 \
     EXPERIMENTAL_FEATURES=1 \
     CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6 \
-    C_LIGHTNING_REST_VERSION=0.10.3
+    C_LIGHTNING_REST_VERSION=0.10.3 \
+    RTL_VERSION=0.14.0
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -221,6 +222,18 @@ RUN apt-get install -qq -y --no-install-recommends \
     cd c-lightning-REST && \
     npm install --omit=dev
 
+# RTL
+RUN mkdir -p /tmp/RTL_install/usr/local && \
+    cd /tmp/RTL_install/usr/local && \
+    wget -q --timeout=60 --waitretry=0 --tries=8 \
+      -O ./RTL-v${RTL_VERSION}.tar.gz \
+      "https://github.com/Ride-The-Lightning/RTL/archive/refs/tags/v${RTL_VERSION}.tar.gz" && \
+    tar xf RTL-v${RTL_VERSION}.tar.gz && \
+    rm RTL-v${RTL_VERSION}.tar.gz && \
+    mv RTL-${RTL_VERSION} RTL && \
+    cd RTL && \
+    npm install --legacy-peer-deps --omit=dev
+
 
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as final
@@ -233,6 +246,7 @@ ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     LIGHTNINGD_PORT=9735 \
     C_LIGHTNING_REST_PORT=49836 \
     C_LIGHTNING_REST_DOCPORT=49837 \
+    RTL_PORT=3000 \
     TOR_SOCKSD="" \
     TOR_CTRLD="" \
     NETWORK_RPCD=""
@@ -253,6 +267,7 @@ ENV LANG=en_US.UTF-8 \
 
 COPY ./entrypoint.sh /entrypoint.sh
 COPY --from=builder /tmp/c-lightning-REST_install/ /
+COPY --from=builder /tmp/RTL_install/ /
 
 RUN apt-get install -y --no-install-recommends \
         inotify-tools \
@@ -266,7 +281,7 @@ RUN apt-get install -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev && \
-    apt-get install -y --no-install-recommends    `# 'c-lightning-REST dependencies'` \
+    apt-get install -y --no-install-recommends    `# 'c-lightning-REST & RTL dependencies'` \
         nodejs && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
@@ -280,10 +295,16 @@ RUN apt-get install -y --no-install-recommends \
     ( cd /usr/local/c-lightning-REST && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json/certs" ) && \
+    touch "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
+    mkdir -p "${LIGHTNINGD_HOME}/.config/RTL" && \
+    ( cd /usr/local/RTL && \
+        ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" ) && \
     chown -R lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
     chown -R lightning:lightning "${LIGHTNINGD_DATA}"
 
+COPY ./RTL-Config.json ${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json
+RUN chown -R lightning:lightning "${LIGHTNINGD_HOME}"
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
@@ -297,8 +318,9 @@ WORKDIR "${LIGHTNINGD_HOME}"
 
 VOLUME "${LIGHTNINGD_HOME}/.config/lightning"
 VOLUME "${LIGHTNINGD_HOME}/.config/c-lightning-REST"
+VOLUME "${LIGHTNINGD_HOME}/.config/RTL"
 VOLUME "${LIGHTNINGD_DATA}"
-EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT} ${C_LIGHTNING_REST_PORT} ${C_LIGHTNING_REST_DOCPORT}
+EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT} ${C_LIGHTNING_REST_PORT} ${C_LIGHTNING_REST_DOCPORT} ${RTL_PORT}
 
 ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "/entrypoint.sh" ]
 CMD ["lightningd"]

@@ -1,0 +1,33 @@
+{
+  "multipass": "<RTL-PASSWORD>",
+  "port": "<RTL-PORT>",
+  "defaultNodeIndex": 1,
+  "dbDirectoryPath": "<RTL-DB-DIRECTORY-PATH>",
+  "SSO": {
+    "rtlSSO": 0,
+    "rtlCookiePath": "",
+    "logoutRedirectLink": ""
+  },
+  "nodes": [
+    {
+      "index": 1,
+      "lnNode": "Core Lightning",
+      "lnImplementation": "CLN",
+      "Authentication": {
+        "macaroonPath": "<RTL-MACAROON-PATH>",
+        "configPath": ""
+      },
+      "Settings": {
+        "userPersona": "OPERATOR",
+        "themeMode": "NIGHT",
+        "themeColor": "INDIGO",
+        "bitcoindConfigPath": "",
+        "logLevel": "INFO",
+        "fiatConversion": true,
+        "unannouncedChannels": false,
+        "lnServerUrl": "http://127.0.0.1:<RTL-LN-SERVER-PORT>",
+        "currencyUnit": "EUR"
+      }
+    }
+  ],
+}

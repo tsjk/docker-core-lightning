@@ -12,11 +12,13 @@ services:
       - 127.0.0.1:9835:9835
       - 127.0.0.1:49836:49836
       - 127.0.0.1:49837:49837
+      - 127.0.0.1:3000:3000
       - 0.0.0.0:9735:9735
     volumes:
       - lightning:/home/lightning/.lightning
       - config:/home/lightning/.config/lightning
       - c-lightning-REST-config:/home/lightning/.config/c-lightning-REST
+      - RTL-config:/home/lightning/.config/RTL
     environment:
       NETWORK_RPCD: "host.docker.internal:8332"
       TOR_SOCKSD: "host.docker.internal:9050"
