@@ -13,6 +13,10 @@ work out of the box.
 Currently, building for the platforms linux/amd64 and linux/arm64 have been
 tested.
 
+The Dockerfile based on Gentoo (`Dockerfile.gentoo`) is much less developed at
+the moment. If you want to try this out, go for using the one based on Debian
+(`Dockerfile`).
+
 # Building
 I for one usually build my images with Podman (Buildah) these days. So, these
 in structions assume you do as well.
@@ -76,7 +80,7 @@ If you were unable to cross-build before, you should be able to now.
 
 # Running
 
-## Bind Address
+## Core Lightning Bind Address
 Contrary to the usual non-containarized case, you'll want to set
 `lightningd.conf`'s `bind-addr` to bind to all interfaces in the container.
 
@@ -109,13 +113,21 @@ To run, you'll need to wire in a few things.
 
 ### Persistent storage
 Assuming that the Debian-based image is used, mapping a host directory to
-`/home/lightning/.lightning` in the container is sufficient.
-E.g., by adding a
-`-v "${HOME}/.lightning":"/home/lightning/.lightning"`
-to your `docker run` command.
+Core Lightning's data directory (having the default setting of
+`/home/lightning/.lightning`) and one to it's configuration directory
+(having the default setting of `/home/lightning/.config/lightning`) in
+the container is sufficient. Note that the configuration file name should be
+`lightningd.conf`. E.g., adding
+```
+-v "${HOME}/.lightning":"/home/lightning/.lightning" \
+    -v "${HOME}/.config/lightning":"/home/lightning/.config/lightning"
+```
+to your `docker run` command, with the host directories
+`"${HOME}/.lightning"` containing Core Lightning's data and
+`"${HOME}/.config/lightning"` containing a `lightningd.conf` should be fine.
 
-If you wire in additional plugins, do see to it that plugins written in Rust or
-C are statically built. Go plugins are always statically built, and Python
+If you wire in additional plugins, do see to it that plugins written in Rust
+and C are statically built. Go plugins are always statically built, and Python
 plugins need not to be worried about (unless you do something exotic like
 pre-generating byte code).
 
@@ -150,23 +162,42 @@ Tor.
 There is support for wiring in access to the Tor deamon using socat processes.
 This is enabled by setting the docker environment variables `TOR_SOCKSD` and
 `TOR_CTRLD`. Both of these are expected to be formatted as `<host>:<port>`.
-That makes maps these addresses to `127.0.0.1:9050` and `127.0.0.1:9051`,
+These addresses are then mapped to `127.0.0.1:9050` and `127.0.0.1:9051`,
 respectively.
 
 If you have your hidden service declared in your `torrc`, have
 `lightningd.conf`'s `addr` setting independent of Tor, and only use Tor as
-a proxy setting `TOR_SOCKSD` is sufficient as the control connection is not
+a proxy, setting `TOR_SOCKSD` is sufficient as the control connection is not
 needed in this case.
 
-Depending on which solution you need, you'll need to set
-`addr` to point to the control port of the Tor daemon and `proxy` to its socks
-port.
+Another option is to set neither `TOR_SOCKSD` nor `TOR_CTRLD`, and instead
+setting `addr` to point to the from-container-reachable control port of the Tor
+daemon (if control is needed), and `proxy` the from-container-reachable socks
+port in Core Lightning's daemon config, respectively.
+
+## CLBOSS
+To use clboss, add
+
+`plugin=/usr/local/bin/clboss`
+
+together with other clboss configuration (if any) to your wired-in core
+lightning config. Remember that clboss is included in the image, and so
+`/usr/local/bin/clboss` is not referring to your local filesystem.
+
+## Core-Lightning-REST & Ride The Lightning (W.I.P.)
+These are automatically set up. Ride The Lightning should be exposed on port
+3000.
+
+Look for the Ride The Lightning password in the Docker logs.
+
+More documentation is coming soon.
 
 ## docker run example (for the Debian-based x86_64 image)
 ```
 $ docker run --name core-lightning --restart=no --network=bridge -d \
     -e EXPOSE_TCP_RPC=true \
     -v "${HOME}/.lightning":"/home/lightning/.lightning" \
+    -v "${HOME}/.config/lightning":"/home/lightning/.config/lightning" \
     -p 127.0.0.1:9835:9835 -p 0.0.0.0:9735:9735 \
     --add-host=host.docker.internal:host-gateway \
     -e NETWORK_RPCD=host.docker.internal:8332 \
@@ -178,18 +209,9 @@ $ docker run --name core-lightning --restart=no --network=bridge -d \
 ## docker-compose
 There is a `docker-compose.xml` that can be used for inspiration.
 
-## CLBOSS
-To use clboss, add
-
-`plugin=/usr/local/bin/clboss`
-
-together with other clboss configuration (if any) to your wired-in core
-lightning config. Remember that clboss is included in the image, and so
-`/usr/local/bin/clboss` is not referring to your local filesystem.
-
 ## Future work (feel free to make pull requests)
+* Expand documentation on Core-Lightning-REST & Ride The Lightning.
 * Add sensible `lightningd.conf` that should work out of the box.
-* Add and auto-setup RTL for easy interaction with Core Lightning.
 * Add images to image repository for others to download.
 * Add reference to containerized Bitcoin daemon and provide instructions for interoperation.
 * Add reference to containerized Tor daemon and provide instructions for interoperation.
