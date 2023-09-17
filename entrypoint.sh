@@ -6,6 +6,10 @@
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
 
+__error() {
+  echo "ERROR: ${*}" >&2; exit 1
+}
+
 if [[ -x "/usr/bin/lightningd" ]]; then
   LIGHTNINGD="/usr/bin/lightningd"
 else
@@ -25,7 +29,7 @@ if [[ "${1}" == "lightningd" ]]; then
     set -- "${LIGHTNINGD}" --conf="${LIGHTNINGD_CONFIG_FILE}" "${@:2}"
   fi
   [[ -s "${LIGHTNINGD_CONFIG_FILE}" ]] || \
-    { echo "ERROR: \"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized! You need to wire in your own Core Lightning configuration."; exit 1; }
+    __error "\"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized! You need to wire in your own Core Lightning configuration."
 fi
 
 
@@ -52,13 +56,16 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   CL_REST_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json"
   if [[ "${START_CL_REST}" == "true" && -s "${CL_REST_CONFIG_FILE}" ]]; then
     if grep -q -E '<CL_REST_PORT>' "${CL_REST_CONFIG_FILE}"; then
-      sed -i 's@<CL_REST_PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${CL_REST_CONFIG_FILE}"
+      sed -i 's@<CL_REST_PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${CL_REST_CONFIG_FILE}" || \
+        __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
     fi
     if grep -q -E '<CL_REST_DOCPORT>' "${CL_REST_CONFIG_FILE}"; then
-      sed -i 's@<CL_REST_DOCPORT>@'"${C_LIGHTNING_REST_DOCPORT}"'@' "${CL_REST_CONFIG_FILE}"
+      sed -i 's@<CL_REST_DOCPORT>@'"${C_LIGHTNING_REST_DOCPORT}"'@' "${CL_REST_CONFIG_FILE}" || \
+        __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
     fi
     if grep -q -E '<CL_REST_LNRPCPATH>' "${CL_REST_CONFIG_FILE}"; then
-      sed -i 's@<CL_REST_LNRPCPATH>@'"${NETWORK_DATA_DIRECTORY}"'/lightning-rpc@' "${CL_REST_CONFIG_FILE}"
+      sed -i 's@<CL_REST_LNRPCPATH>@'"${NETWORK_DATA_DIRECTORY}"'/lightning-rpc@' "${CL_REST_CONFIG_FILE}" || \
+        __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
     fi
   elif [[ "${START_CL_REST}" == "true" && ! -s "${CL_REST_CONFIG_FILE}" ]]; then
     START_CL_REST="false"
@@ -69,17 +76,21 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${START_RTL}" == "true" && -s "${RTL_CONFIG_FILE}" ]]; then
     if grep -q -E '<RTL-PASSWORD>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
       [[ -n "${RTL_PASSWORD}" ]] || RTL_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
-      sed -i 's@<RTL-PASSWORD>@'"${RTL_PASSWORD}"'@' "${RTL_CONFIG_FILE}"
+      sed -i 's@<RTL-PASSWORD>@'"${RTL_PASSWORD}"'@' "${RTL_CONFIG_FILE}" || \
+        __error "Failed to update \"${RTL_CONFIG_FILE}\"."
       echo "RTL password is \"${RTL_PASSWORD}\"."
     fi
     if grep -q -E '<RTL_PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
-      sed -i 's@<RTL_PORT>@'"${RTL_PORT}"'@' "${RTL_CONFIG_FILE}"
+      sed -i 's@<RTL_PORT>@'"${RTL_PORT}"'@' "${RTL_CONFIG_FILE}" || \
+        __error "Failed to update \"${RTL_CONFIG_FILE}\"."
     fi
     if grep -q -E '<RTL-DB-DIRECTORY-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
-      sed -i 's@<RTL-DB-DIRECTORY-PATH>@'"${LIGHTNINGD_HOME}"'/.config/RTL@' "${RTL_CONFIG_FILE}"
+      sed -i 's@<RTL-DB-DIRECTORY-PATH>@'"${LIGHTNINGD_HOME}"'/.config/RTL@' "${RTL_CONFIG_FILE}" || \
+        __error "Failed to update \"${RTL_CONFIG_FILE}\"."
     fi
     if grep -q -E '<RTL-LN-SERVER-PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
-      sed -i 's@<RTL-LN-SERVER-PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${RTL_CONFIG_FILE}"
+      sed -i 's@<RTL-LN-SERVER-PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${RTL_CONFIG_FILE}" || \
+        __error "Failed to update \"${RTL_CONFIG_FILE}\"."
     fi
   elif [[ "${START_RTL}" == "true" && ! -s "${RTL_CONFIG_FILE}" ]]; then
     START_RTL="false"
