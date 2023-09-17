@@ -6,27 +6,28 @@
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
 
-networkdatadir="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
 if [[ -x "/usr/bin/lightningd" ]]; then
   LIGHTNINGD="/usr/bin/lightningd"
 else
   LIGHTNINGD="/usr/local/bin/lightningd"
 fi
+NETWORK_DATA_DIRECTORY="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
 
 if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
-  for a; do [[ "${a}" =~ ^--conf=.*$ ]] && config_file="${a##--conf=}"; done
-  [[ -z "${config_file}" || -f "${config_file}" ]] || exit 1
-  if [[ -n "${config_file}" ]]; then
+  for a; do [[ "${a}" =~ ^--conf=.*$ ]] && LIGHTNINGD_CONFIG_FILE="${a##--conf=}"; done
+  if [[ -n "${LIGHTNINGD_CONFIG_FILE}" ]]; then
     set -- "${LIGHTNINGD}" "${@:2}"
   else
-    [[ -f "${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" ]] && \
-      config_file="${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" || exit 1
-    set -- "${LIGHTNINGD}" --conf="${config_file}" "${@:2}"
+    LIGHTNINGD_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf"
+    set -- "${LIGHTNINGD}" --conf="${LIGHTNINGD_CONFIG_FILE}" "${@:2}"
   fi
+  [[ -s "${LIGHTNINGD_CONFIG_FILE}" ]] || \
+    { echo "ERROR: \"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized! You need to wire in your own Core Lightning configuration."; exit 1; }
 fi
+
 
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then
@@ -48,15 +49,24 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       su -s /bin/sh lightning -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" &
       echo $! > /tmp/socat-tor_ctrl.pid; }
 
-  if [[ "${START_CL_REST}" == "true" ]]; then
-    findmnt "${LIGHTNINGD_HOME}/.config/c-lightning-REST" > /dev/null 2>&1 && \
-      [[ ! -f "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" || \
-         -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" ]] || START_CL_REST="false"
+  CL_REST_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json"
+  if [[ "${START_CL_REST}" == "true" && -s "${CL_REST_CONFIG_FILE}" ]]; then
+    if grep -q -E '<CL_REST_PORT>' "${CL_REST_CONFIG_FILE}"; then
+      sed -i 's@<CL_REST_PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${CL_REST_CONFIG_FILE}"
+    fi
+    if grep -q -E '<CL_REST_DOCPORT>' "${CL_REST_CONFIG_FILE}"; then
+      sed -i 's@<CL_REST_DOCPORT>@'"${C_LIGHTNING_REST_DOCPORT}"'@' "${CL_REST_CONFIG_FILE}"
+    fi
+    if grep -q -E '<CL_REST_LNRPCPATH>' "${CL_REST_CONFIG_FILE}"; then
+      sed -i 's@<CL_REST_LNRPCPATH>@'"${NETWORK_DATA_DIRECTORY}"'/lightning-rpc@' "${CL_REST_CONFIG_FILE}"
+    fi
+  elif [[ "${START_CL_REST}" == "true" && ! -s "${CL_REST_CONFIG_FILE}" ]]; then
+    START_CL_REST="false"
   fi
   [[ "${START_CL_REST}" == "true" ]] || START_RTL="false"
 
-  if [[ "${START_RTL}" == "true" ]]; then
-    RTL_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json"
+  RTL_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json"
+  if [[ "${START_RTL}" == "true" && -s "${RTL_CONFIG_FILE}" ]]; then
     if grep -q -E '<RTL-PASSWORD>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
       [[ -n "${RTL_PASSWORD}" ]] || RTL_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
       sed -i 's@<RTL-PASSWORD>@'"${RTL_PASSWORD}"'@' "${RTL_CONFIG_FILE}"
@@ -71,6 +81,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     if grep -q -E '<RTL-LN-SERVER-PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
       sed -i 's@<RTL-LN-SERVER-PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${RTL_CONFIG_FILE}"
     fi
+  elif [[ "${START_RTL}" == "true" && ! -s "${RTL_CONFIG_FILE}" ]]; then
+    START_RTL="false"
   fi
 
   [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
@@ -81,15 +93,15 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh lightning -c "${*}" &
     echo "Core-Lightning starting..."
     while read -r i; do if [[ "${i}" == "lightning-rpc" ]]; then break; fi
-    done < <(inotifywait -e create,open --format '%f' --quiet "${networkdatadir}" --monitor)
+    done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
     echo "Core-Lightning started."
     if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
       echo "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
       su -s /bin/sh lightning \
-         -c "/usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${networkdatadir}/lightning-rpc" &
+         -c "/usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" &
     fi
 
-    if [[ -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" ]]; then
+    if [[ "${START_CL_REST}" == "true" ]]; then
       su -s /bin/sh lightning -c 'cd /usr/local/c-lightning-REST && node cl-rest.js' &
       echo "c-lightning-REST starting..."
       if [[ ! -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs/access.macaroon" ]]; then

@@ -295,16 +295,16 @@ RUN apt-get install -y --no-install-recommends \
     ( cd /usr/local/c-lightning-REST && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json/certs" ) && \
-    touch "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL" && \
     ( cd /usr/local/RTL && \
         ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" ) && \
-    chown -R lightning:lightning "${LIGHTNINGD_HOME}" && \
+    chown -R -h lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
-    chown -R lightning:lightning "${LIGHTNINGD_DATA}"
+    chown -R -h lightning:lightning "${LIGHTNINGD_DATA}"
 
+COPY ./cl-rest-config.json ${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json
 COPY ./RTL-Config.json ${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json
-RUN chown -R lightning:lightning "${LIGHTNINGD_HOME}"
+RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
@@ -317,8 +317,6 @@ COPY --from=downloader "/tini" /usr/bin/tini
 WORKDIR "${LIGHTNINGD_HOME}"
 
 VOLUME "${LIGHTNINGD_HOME}/.config/lightning"
-VOLUME "${LIGHTNINGD_HOME}/.config/c-lightning-REST"
-VOLUME "${LIGHTNINGD_HOME}/.config/RTL"
 VOLUME "${LIGHTNINGD_DATA}"
 EXPOSE ${LIGHTNINGD_PORT} ${LIGHTNINGD_RPC_PORT} ${C_LIGHTNING_REST_PORT} ${C_LIGHTNING_REST_DOCPORT} ${RTL_PORT}
 

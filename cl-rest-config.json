@@ -1,0 +1,10 @@
+{
+    "BIND": "0.0.0.0",
+    "PORT": <CL_REST_PORT>,
+    "DOCPORT": <CL_REST_DOCPORT>,
+    "PROTOCOL": "http",
+    "EXECMODE": "production",
+    "LNRPCPATH": "<CL_REST_LNRPCPATH>",
+    "RPCCOMMANDS": ["*"],
+    "DOMAIN": "localhost"
+}
