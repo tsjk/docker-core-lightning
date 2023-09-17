@@ -26,9 +26,7 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-RUN set -ex \
-	&& apt-get update \
-	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr wget
+RUN set -ex && apt-get install -qq --no-install-recommends ca-certificates dirmngr wget
 
 WORKDIR /opt
 
@@ -91,9 +89,7 @@ ARG MAKE_NPROC=0 \
     LIGHTNINGD_VERSION=v23.05.2 \
     DEVELOPER=1 \
     EXPERIMENTAL_FEATURES=1 \
-    CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6 \
-    C_LIGHTNING_REST_VERSION=0.10.3 \
-    RTL_VERSION=0.14.0
+    CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -208,10 +204,31 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
     make DESTDIR=/tmp/clboss_install install
 
+
+# - node builder -
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
+
+ARG C_LIGHTNING_REST_VERSION=0.10.3 \
+    RTL_VERSION=0.14.0
+
+RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
+    echo 'Etc/UTC' > /etc/timezone && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
+    apt-get update -qq && \
+    apt-get install -qq -y locales && \
+    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+    dpkg-reconfigure -f noninteractive locales && \
+    update-locale LANG=en_US.UTF-8
+
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+RUN set -ex && apt-get install -qq --no-install-recommends ca-certificates wget
+
 # c-lightning-REST
-RUN apt-get install -qq -y --no-install-recommends \
-        nodejs npm && \
-    mkdir -p /tmp/c-lightning-REST_install/usr/local && \
+RUN mkdir -p /tmp/c-lightning-REST_install/usr/local && \
     cd /tmp/c-lightning-REST_install/usr/local && \
     wget -q --timeout=60 --waitretry=0 --tries=8 \
       -O ./c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz \
@@ -232,11 +249,12 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
     rm RTL-v${RTL_VERSION}.tar.gz && \
     mv RTL-${RTL_VERSION} RTL && \
     cd RTL && \
-    npm install --legacy-peer-deps --omit=dev
+    npm install --legacy-peer-deps --omit=dev && \
+    npm prune --production --legacy-peer-deps
 
 
 # - final -
-FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as final
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
 ARG LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
@@ -266,8 +284,8 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 COPY ./entrypoint.sh /entrypoint.sh
-COPY --from=builder /tmp/c-lightning-REST_install/ /
-COPY --from=builder /tmp/RTL_install/ /
+COPY --from=node-builder /tmp/c-lightning-REST_install/ /
+COPY --from=node-builder /tmp/RTL_install/ /
 
 RUN apt-get install -y --no-install-recommends \
         inotify-tools \
@@ -281,11 +299,10 @@ RUN apt-get install -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev && \
-    apt-get install -y --no-install-recommends    `# 'c-lightning-REST & RTL dependencies'` \
-        nodejs && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
     chmod 0755 /entrypoint.sh && \
+    userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning && \
