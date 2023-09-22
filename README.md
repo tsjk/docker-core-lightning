@@ -128,8 +128,10 @@ to your `docker run` command, with the host directories
 
 If you wire in additional plugins, do see to it that plugins written in Rust
 and C are statically built. Go plugins are always statically built, and Python
-plugins need not to be worried about (unless you do something exotic like
-pre-generating byte code).
+plugins need not to be worried about in this sens (unless you do something
+exotic like pre-generating byte code). In the case of Python plugins, you do
+need to see to it that all requirements are available in the container. One
+way of installing requirements is to use a `pre-start.d` script.
 
 ### Crypto daemon
 For the bitcoin network, this would be your bitcoin daemon.
@@ -174,6 +176,9 @@ Another option is to set neither `TOR_SOCKSD` nor `TOR_CTRLD`, and instead
 setting `addr` to point to the from-container-reachable control port of the Tor
 daemon (if control is needed), and `proxy` the from-container-reachable socks
 port in Core Lightning's daemon config, respectively.
+
+## pre-start.d
+Documentation is coming soon.
 
 ## CLBOSS
 To use clboss, add

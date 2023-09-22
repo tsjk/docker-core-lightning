@@ -46,6 +46,18 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     { [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}"; } || \
       __error "chown -R lightning:lightning \"${LIGHTNINGD_HOME}\" - returned with error"
 
+  if [[ -d "${LIGHTNINGD_DATA}/.pre-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
+    for f in "${LIGHTNINGD_DATA}/.pre-start.d"/*.sh; do
+      if [[ -x "${f}" ]]; then
+        echo "--- Executing \"${f}\":"
+        "${f}" || __error "\"${f}\" exited with error code ${?}."
+        echo "--- Finished executing \"${f}\"."
+      else
+        __error "Found non-executable file \"${f}\"! Either make it executable, or remove it."
+      fi
+    done
+  fi
+
   [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 `cat /tmp/socat-network_rpc.pid` > /dev/null 2>&1; } || {
       rm -f /tmp/socat-network_rpc.lock /tmp/socat-network_rpc.pid
       su -s /bin/sh lightning -c "exec /usr/bin/socat -L /tmp/socat-network_rpc.lock TCP4-LISTEN:8332,bind=127.0.0.1,reuseaddr,fork TCP4:${NETWORK_RPCD}" &
