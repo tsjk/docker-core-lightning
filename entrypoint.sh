@@ -5,6 +5,7 @@
 : "${START_CL_REST:=true}"
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
+: "${OFFLINE:=false}"
 
 __warning() {
   echo "WARNING: ${*}" >&2
@@ -76,6 +77,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
     fi
   elif [[ "${START_CL_REST}" == "true" && ! -s "${CL_REST_CONFIG_FILE}" ]]; then
+    __warning "c-lightning-REST configuration file does not exist or is empty. Will hence not start c-lightning-REST."
     START_CL_REST="false"
   fi
   [[ "${START_CL_REST}" == "true" ]] || START_RTL="false"
@@ -105,6 +107,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   fi
 
   [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
+
+  if [[ "${OFFLINE}" == "true" ]]; then
+    __warning "Will start Core Lightning in off-line mode."
+    set -- --offline "${@}"
+  fi
 
   if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
     set -m
