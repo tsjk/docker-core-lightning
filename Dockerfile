@@ -287,12 +287,20 @@ COPY --from=node-builder /tmp/c-lightning-REST_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
 RUN apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         inotify-tools \
         libpq5 \
-        python3.11 \
+        python3-mako \
         python3-pip \
+        python3-setuptools \
+        python3-venv \
+        python3-wheel \
+        python3.11 \
         qemu-user-static \
-        socat && \
+        socat \
+        wget \
+        zlib1g && \
     apt-get install -y --no-install-recommends    `# 'CLBOSS dependencies'` \
         dnsutils \
         libev-dev \
@@ -300,6 +308,7 @@ RUN apt-get install -y --no-install-recommends \
         libsqlite3-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
