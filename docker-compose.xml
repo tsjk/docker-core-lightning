@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  bitcoind:
+  core-lightning:
     build: "."
     image: core-lightning
     container_name: core-lightning
