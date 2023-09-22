@@ -155,18 +155,20 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 
 ENV PYTHON_VERSION=3 \
     PIP_ROOT_USER_ACTION=ignore
-RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
-    rm /usr/lib/python3.11/EXTERNALLY-MANAGED && \
-    pip3 install grpcio-tools
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
+    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
+    rm /usr/lib/python3.11/EXTERNALLY-MANAGED
 
 RUN cd /tmp && \
     git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
     cd /tmp/lightning && \
+    pip3 wheel cryptography && \
     wget -q --timeout=60 --waitretry=0 --tries=8 \
       -O ./pyproject.toml 'https://raw.githubusercontent.com/ElementsProject/lightning/9f1e1ada2a0274db982a59d912313e3e9684a32b/pyproject.toml' && \
     wget -q --timeout=60 --waitretry=0 --tries=8 \
       -O ./poetry.lock 'https://raw.githubusercontent.com/ElementsProject/lightning/9f1e1ada2a0274db982a59d912313e3e9684a32b/poetry.lock' && \
+    /root/.local/bin/poetry env use system && \
+    /root/.local/bin/poetry config virtualenvs.create false && \
     /root/.local/bin/poetry install && \
     ./configure --prefix=/usr/local \
       --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
@@ -180,8 +182,8 @@ RUN cd /tmp && \
       --enable-static && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
     /root/.local/bin/poetry run make DESTDIR=/tmp/lightning_install install && \
-    { [ ! -d ./plugin/clnrest ] || pip3 install -r ./plugins/clnrest/requirements.txt; } && \
-    { [ ! -d ./contrib/pyln-client ] || pip3 install ./contrib/pyln-client; }
+    { [ ! -d ./plugin/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
+    { [ ! -d ./contrib/pyln-client ] || pip3 install --prefix=/usr ./contrib/pyln-client; }
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -289,6 +291,7 @@ COPY --from=node-builder /tmp/RTL_install/ /
 RUN apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        git \
         inotify-tools \
         libpq5 \
         python3-mako \
@@ -309,6 +312,7 @@ RUN apt-get install -y --no-install-recommends \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
+    rm /usr/lib/python3.11/EXTERNALLY-MANAGED && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
@@ -325,7 +329,8 @@ RUN apt-get install -y --no-install-recommends \
         ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" ) && \
     chown -R -h lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
-    chown -R -h lightning:lightning "${LIGHTNINGD_DATA}"
+    chown -R -h lightning:lightning "${LIGHTNINGD_DATA}" && \
+    rm -rf /tmp/*
 
 COPY ./cl-rest-config.json ${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json
 COPY ./RTL-Config.json ${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json
