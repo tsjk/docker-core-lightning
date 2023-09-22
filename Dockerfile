@@ -133,6 +133,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         python3-pip \
         python3-setuptools \
         python3-venv \
+        python3-wheel \
         python3.11 \
         qemu-user-static \
         wget\
@@ -157,8 +158,6 @@ ENV PYTHON_VERSION=3 \
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
     rm /usr/lib/python3.11/EXTERNALLY-MANAGED && \
-    pip3 install --upgrade pip setuptools wheel && \
-    pip3 wheel cryptography && \
     pip3 install grpcio-tools
 
 RUN cd /tmp && \
