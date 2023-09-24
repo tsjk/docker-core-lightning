@@ -5,6 +5,7 @@
 : "${START_CL_REST:=true}"
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
+: "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
 __warning() {
@@ -46,6 +47,18 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     { [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}"; } || \
       __error "chown -R lightning:lightning \"${LIGHTNINGD_HOME}\" - returned with error"
 
+  if [[ -d "${LIGHTNINGD_DATA}/.env.d" && $(find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | wc -l) -gt 0 ]]; then
+    find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | sort | while read -r; do
+      if [[ -s "${REPLY}" ]]; then
+        echo "--- Sourcing \"${REPLY}\":"
+        . "${REPLY}" || __error "Failed to source file \"${REPLY}\""
+        echo "--- Finished sourcing \"${REPLY}\"."
+      else
+        __error "Found zero-sized file \"${f}\"!"
+      fi
+    done
+  fi
+
   if [[ -d "${LIGHTNINGD_DATA}/.pre-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
     for f in "${LIGHTNINGD_DATA}/.pre-start.d"/*.sh; do
       if [[ -x "${f}" ]]; then
@@ -60,17 +73,17 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
   [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 `cat /tmp/socat-network_rpc.pid` > /dev/null 2>&1; } || {
       rm -f /tmp/socat-network_rpc.lock /tmp/socat-network_rpc.pid
-      su -s /bin/sh -c "exec /usr/bin/socat -L /tmp/socat-network_rpc.lock TCP4-LISTEN:8332,bind=127.0.0.1,reuseaddr,fork TCP4:${NETWORK_RPCD}" - lightning &
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-network_rpc.lock TCP4-LISTEN:8332,bind=127.0.0.1,reuseaddr,fork TCP4:${NETWORK_RPCD}" - lightning &
       echo $! > /tmp/socat-network_rpc.pid
       kill -0 $(< /tmp/socat-network_rpc.pid) > /dev/null 2>&1 || __error "Failed to setup socat for crypto daemon's rpc service"; }
   [[ -z "${TOR_SOCKSD}" ]] || { [[ -e /tmp/socat-tor_socks.lock ]] && [[ -e /tmp/socat-tor_socks.pid ]] && kill -0 `cat /tmp/socat-tor_socks.pid` > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_socks.lock /tmp/socat-tor_socks.pid
-      su -s /bin/sh -c "exec /usr/bin/socat -L /tmp/socat-tor_socks.lock TCP4-LISTEN:9050,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_SOCKSD}" - lightning &
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_socks.lock TCP4-LISTEN:9050,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_SOCKSD}" - lightning &
       echo $! > /tmp/socat-tor_socks.pid
       kill -0 $(< /tmp/socat-tor_socks.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor SOCKS service"; }
   [[ -z "${TOR_CTRLD}" ]] || { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 `cat /tmp/socat-tor_ctrl.pid` > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_ctrl.lock /tmp/socat-tor_ctrl.pid
-      su -s /bin/sh -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" - lightning &
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" - lightning &
       echo $! > /tmp/socat-tor_ctrl.pid
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
 
@@ -128,18 +141,18 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
     set -m
 
-    set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh -w PYTHONPATH -c "exec ${*}" - lightning &
+    set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec ${*}" - lightning &
     echo "Core-Lightning starting..."
     while read -r i; do if [[ "${i}" == "lightning-rpc" ]]; then break; fi
     done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
     echo "Core-Lightning started."
     if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
       echo "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
-      su -s /bin/sh -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
     fi
 
     if [[ "${START_CL_REST}" == "true" ]]; then
-      su -s /bin/sh -c 'cd /usr/local/c-lightning-REST && exec node cl-rest.js' - lightning &
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/c-lightning-REST && exec node cl-rest.js' - lightning &
       echo "c-lightning-REST starting..."
       if [[ ! -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs/access.macaroon" ]]; then
         while read -r i; do if [[ "${i}" == "access.macaroon" ]]; then break; fi
@@ -154,7 +167,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fi
       if [[ "${START_RTL}" == "true" ]]; then
         echo "Starting RTL."
-	su -s /bin/sh -c 'cd /usr/local/RTL && exec node rtl' - lightning &
+	su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
       fi
     fi
 
