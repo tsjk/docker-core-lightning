@@ -161,13 +161,13 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 &&
     curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
     { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || rm /usr/lib/python3.9/EXTERNALLY-MANAGED; }
 
-RUN cd /tmp && \
+RUN export PATH="/root/.local/bin:$PATH" && \
+    cd /tmp && \
     git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
     cd /tmp/lightning && \
     pip3 wheel cryptography && \
-    /root/.local/bin/poetry env use system && \
-    /root/.local/bin/poetry config virtualenvs.create false && \
-    /root/.local/bin/poetry install && \
+    poetry env use system && \
+    poetry install && \
     ./configure --prefix=/usr/local \
       --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
       --$( [ ${EXPERIMENTAL_FEATURES} -ne 0 ] && echo enable || echo disable)-experimental-features \
@@ -179,8 +179,8 @@ RUN cd /tmp && \
       --enable-rust \
       --enable-static && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-    /root/.local/bin/poetry run make DESTDIR=/tmp/lightning_install install && \
-    { [ ! -d ./plugin/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
+    poetry run make DESTDIR=/tmp/lightning_install install && \
+    { [ ! -d ./plugins/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
     { [ ! -d ./contrib/pyln-client ] || pip3 install --prefix=/usr ./contrib/pyln-client; }
 
 # CLBOSS
@@ -255,7 +255,8 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bullseye-slim as final
 
-ARG LIGHTNINGD_UID=1001
+ARG LIGHTNINGD_VERSION=v23.05.2 \
+    LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     LIGHTNINGD_NETWORK=bitcoin \
@@ -287,6 +288,7 @@ COPY --from=node-builder /tmp/c-lightning-REST_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
+    PYTHONPATH=/usr/lib/python3.9/site-packages \
     PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
@@ -314,7 +316,12 @@ RUN apt-get install -qq -y --no-install-recommends \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
     { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || \
         rm /usr/lib/python3.9/EXTERNALLY-MANAGED; } && \
-    echo '[ -z "$PYTHONPATH" ] && export PYTHONPATH="/usr/lib/python3.9/site-packages" || export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.9/site-packages"' >> /etc/profile.d/python.sh && \
+    cd /tmp && \
+    git clone --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
+    cd /tmp/lightning && \
+    { [ ! -d ./plugins/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
+    { [ ! -d ./contrib/pyln-client ] || pip3 install --prefix=/usr ./contrib/pyln-client; } && \
+    cd / && rm -rf /tmp/lightning && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
@@ -340,7 +347,6 @@ RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
-COPY --from=builder /usr/lib/python3/dist-packages/ /usr/lib/python3/dist-packages/
 COPY --from=builder /tmp/clboss_install/ /
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin

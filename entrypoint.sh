@@ -128,7 +128,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
     set -m
 
-    set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh -c "exec ${*}" - lightning &
+    set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh -w PYTHONPATH -c "exec ${*}" - lightning &
     echo "Core-Lightning starting..."
     while read -r i; do if [[ "${i}" == "lightning-rpc" ]]; then break; fi
     done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
