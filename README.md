@@ -134,13 +134,26 @@ are available in the container. One way of installing requirements is to use a
 `pre-start.d` script (see the section on this below, and the
 `examples/.pre-start.d/01-install-python-deps.sh` file).
 
-Some plugins are tricky to compile statically. The solution offered here for
-those cases is to start the container with a shell and one-shoot compile your
-plugins, placing the resulting binaries on persistent storage. A shell can be
-started by running:
+Some plugins are tricky to compile statically. A solution for such cases
+offered here is to start the container with a shell and one-shoot compile the
+plugins (dynamically), placing the resulting binaries on persistent storage.
+This way the plugins will be linked to the correct libraries, and
+recompilation is only needed on library changes (e.g. after major updates to
+the base image, such as it being upgraded from Bullseye to Bookworm). Provided
+that `docker-compose.yml` has been set up, an interactive shell can be started
+by running:
 ```
 docker compose -f docker-compose.yml -f docker-compose.maintenance.yml \
     run --rm core-lightning
+```
+
+Doing this for a foreign architecture, for e.g. compiling plugins for a weaker
+device on a stronger one, is possible by prepending the above command with
+`DOCKER_DEFAULT_PLATFORM=<platform>` - given that an image has been built for
+that platform. E.g.
+```
+DOCKER_DEFAULT_PLATFORM=linux/aarch64 docker compose -f docker-compose.yml \
+    -f docker-compose.maintenance.yml run --rm core-lightning
 ```
 
 Examples for compiling both Rust and Go plugins can be found in
