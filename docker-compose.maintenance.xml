@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  core-lightning:
+    entrypoint: "/bin/bash"
+    command: "-i"
+    stdin_open: true
+    tty: true
