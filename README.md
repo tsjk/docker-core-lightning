@@ -27,7 +27,7 @@ e.g.:
 
 ```
 $ ( export BUILDAH_FORMAT='docker' && \
-      buildah bud --pull --layers --manifest local/core-lightning:latest . )
+      buildah bud --pull --layers --tag local/core-lightning:latest . )
 ```
 
 However, if you want to cross-build, you'll need to install QEMU user emulation
@@ -39,7 +39,7 @@ with:
 ```
 $ ( export BUILDAH_FORMAT='docker' && \
       buildah bud --platform linux/arm64 \
-        --pull --layers --manifest local/core-lightning:latest . )
+        --pull --layers --tag local/core-lightning:arm64-latest . )
 ```
 
 ## On some systems however additional steps might be necessary
@@ -126,13 +126,27 @@ to your `docker run` command, with the host directories
 `"${HOME}/.lightning"` containing Core Lightning's data and
 `"${HOME}/.config/lightning"` containing a `lightningd.conf` should be fine.
 
-If you wire in additional plugins, do see to it that plugins written in Rust
-and C are statically built. Go plugins are always statically built, and Python
-plugins need not to be worried about in this sens (unless you do something
-exotic like pre-generating byte code). In the case of Python plugins, you do
-need to see to it that all requirements are available in the container. One
-way of installing requirements is to use a `pre-start.d` script (see the
-section on this below, and the `01-pre-start-example.sh` file).
+If you wire in additional plugins, do see to it that plugins needing
+compilation are statically built. Python plugins need not to be worried about
+in this sense (unless you do something exotic like pre-generating byte code).
+In the case of Python plugins, you do need to see to it that all requirements
+are available in the container. One way of installing requirements is to use a
+`pre-start.d` script (see the section on this below, and the
+`examples/.pre-start.d/01-install-python-deps.sh` file).
+
+Some plugins are tricky to compile statically. The solution offered here for
+those cases is to start the container with a shell and one-shoot compile your
+plugins, placing the resulting binaries on persistent storage. A shell can be
+started by running:
+```
+docker compose -f docker-compose.yml -f docker-compose.maintenance.yml \
+    run --rm core-lightning
+```
+
+Examples for compiling both Rust and Go plugins can be found in
+`examples/compile-rust-plugins.sh` and `examples/compile-go-plugins.sh`,
+respectively. In these examples it is thus assumed that
+`/home/lightning/.lightning/plugins` resides on persistent storage.
 
 ### Crypto daemon
 For the bitcoin network, this would be your bitcoin daemon.
@@ -178,13 +192,21 @@ setting `addr` to point to the from-container-reachable control port of the Tor
 daemon (if control is needed), and `proxy` the from-container-reachable socks
 port in Core Lightning's daemon config, respectively.
 
-## pre-start.d
+## .env.d
+Files in the `${LIGHTNINGD_DATA}/.env.d` are sourced by the root user in the
+container before Core Lightning is started. While one can do anything in such
+files, the intended use case is to set/override environment variables.
+
+Perhaps one wants to one-shoot-install python packages to a prefix pointing to
+persistent storage and then update `PYTHONPATH` to include that prefix.
+
+## .pre-start.d
 Executable files with the `.sh` suffix in the `${LIGHTNINGD_DATA}/.pre-start.d`
 directory are executed by the root user in the container before Core Lightning
 is started. If a script ought be executed by a different user, one can always
 `su` that user in the script.
 
-Suitable use-cases include installing plugin dependencies, and carrying out
+Suitable use cases include installing plugin dependencies, and carrying out
 other chores.
 
 ## CLBOSS
