@@ -107,7 +107,8 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-ENV PYTHON_VERSION=3.9 \
+ENV PYTHON_VERSION=3 \
+    PYTHONPATH=/usr/lib/python3.9/site-packages \
     PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
@@ -137,7 +138,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         python3-setuptools \
         python3-venv \
         python3-wheel \
-        python${PYTHON_VERSION} \
+        python3.9 \
         qemu-user-static \
         wget\
         zlib1g \
@@ -156,9 +157,9 @@ ENV RUST_PROFILE=release \
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     rustup toolchain install stable --component rustfmt --allow-downgrade
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
     curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
-    { [ ! -f /usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED; }
+    { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || rm /usr/lib/python3.9/EXTERNALLY-MANAGED; }
 
 RUN cd /tmp && \
     git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
@@ -270,7 +271,7 @@ ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
     echo 'Etc/UTC' > /etc/timezone && \
     dpkg-reconfigure --frontend noninteractive tzdata && \
-    apt-get update && \
+    apt-get update -qq && \
     apt-get install -qq -y locales && \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
@@ -285,35 +286,35 @@ COPY ./entrypoint.sh /entrypoint.sh
 COPY --from=node-builder /tmp/c-lightning-REST_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
-ENV PYTHON_VERSION=3.9 \
+ENV PYTHON_VERSION=3 \
     PIP_ROOT_USER_ACTION=ignore
 
-RUN apt-get install -y --no-install-recommends \
+RUN apt-get install -qq -y --no-install-recommends \
         ca-certificates \
         curl \
         git \
         inotify-tools \
         libpq5 \
-        python3-mako \
+        openssl \
+        python3.9 \
         python3-pip \
         python3-setuptools \
-        python3-venv \
         python3-wheel \
-        python${PYTHON_VERSION} \
         qemu-user-static \
         socat \
         wget \
         zlib1g && \
-    apt-get install -y --no-install-recommends    `# 'CLBOSS dependencies'` \
+    apt-get install -qq -y --no-install-recommends    `# 'CLBOSS dependencies'` \
         dnsutils \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
-    { [ ! -f /usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED ] || \
-        rm /usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED; } && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
+    { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || \
+        rm /usr/lib/python3.9/EXTERNALLY-MANAGED; } && \
+    echo '[ -z "$PYTHONPATH" ] && export PYTHONPATH="/usr/lib/python3.9/site-packages" || export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.9/site-packages"' >> /etc/profile.d/python.sh && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
@@ -339,7 +340,7 @@ RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
-COPY --from=builder /usr/lib/python${PYTHON_VERSION}/site-packages/ /usr/lib/python${PYTHON_VERSION}/site-packages/
+COPY --from=builder /usr/lib/python3/dist-packages/ /usr/lib/python3/dist-packages/
 COPY --from=builder /tmp/clboss_install/ /
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
