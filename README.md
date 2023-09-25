@@ -6,9 +6,10 @@ v7) for building a container with core-lightning and clboss.
 This is a work in progress, but it might already be useful - for inspiration at
 least.
 
-For now it is assumed that you know your way around containers and core
-lightning. In the future there might be configuration that enables things to
-work out of the box.
+Although the aim of this project is to just work out of the box, it hasn't
+reached a mature state. For now it is assumed that the user knows her way
+around containers, Core Lightning and system administration. In the future
+these assumptions may be relaxed.
 
 Currently, building for the platforms linux/amd64 and linux/arm64 have been
 tested.
@@ -33,8 +34,8 @@ $ ( export BUILDAH_FORMAT='docker' && \
 However, if you want to cross-build, you'll need to install QEMU user emulation
 and binfmt support.
 
-After that, you ought be able to cross-build your image (e.g. for linux/arm64)
-with:
+After that, you ought be able to cross-build your image (e.g. for linux/arm64
+on linux/amd64) with:
 
 ```
 $ ( export BUILDAH_FORMAT='docker' && \
@@ -76,7 +77,46 @@ to instead run (as root):
 In the above it's assumed that your QEMU binaries reside in `/usr/bin`. If they
 do not, you'll need to adjust the `--qemu-path` parameter.
 
+The `build.sh` script in the current repository aims to help with this
+additional setup. By running
+```
+$ ./build.sh --prepare-qemu-only
+```
+
+it'll attempt to do the above (by calling `sudo` when needed).
+
 If you were unable to cross-build before, you should be able to now.
+
+# Running in TL;DR-mode
+The aim of this project is to get Core Lightning running in a container in a
+flexible but easy way. In principle, it should be possible to just build the
+image (either with `buildah` or with `docker`), set the `NETWORK_RPCD`
+variables in the `docker-compose.yml` file, and then run it all with
+`docker compose up`.
+
+The bundled configuration should work out of the box - given that one correctly
+sets up the connection to a Bitcoin Daemon with the `NETWORK_RPCD` variables -,
+but with this default bundled configuration Core Lightning has clearnet support
+only.
+
+If one does have the patience to look over the configuration file, a
+recommendation is to start with the following settings:
+* `network` (in case one doesn't want to go onto mainnet)
+* `wallet` (for making sure that the wallet database location is according to
+wishes)
+* `alias` (to give an alias for the node)
+
+Users that want Tor support may also want to look at (after having wired in
+Tor support - see below):
+* `announce-addr-discovered`
+* `addr`
+* `announce-addr-dns`
+* `autolisten`
+* `always-use-proxy`
+* `disable-dns`
+
+Note that I (the author) use `podman` and `podman-compose`, so it might happen
+that some Podman-only stuff have snuck in. Please file a bug in this case.
 
 # Running
 
@@ -98,7 +138,6 @@ by binding it to your network interface - or all interfaces
 
 Setting `bind-addr=127.0.0.1` in the container's `lightningd.conf` will make
 the core lightning daemon only bind to the container's loopback interface.
-
 That is a valid setting, but then extra steps need to be taken in order to
 make that port accessible to whatever should be able to access it.
 
@@ -117,19 +156,21 @@ Core Lightning's data directory (having the default setting of
 `/home/lightning/.lightning`) and one to it's configuration directory
 (having the default setting of `/home/lightning/.config/lightning`) in
 the container is sufficient. Note that the configuration file name should be
-`lightningd.conf`. E.g., adding
+`lightningd.conf`. While the `docker-compose.yml` does define defaults here,
+one might want to wire in different directories when migrating an existing
+non-containerized setup to a containerized one.  E.g., adding
 ```
 -v "${HOME}/.lightning":"/home/lightning/.lightning" \
     -v "${HOME}/.config/lightning":"/home/lightning/.config/lightning"
 ```
-to your `docker run` command, with the host directories
+to the `docker run` command, with the host directories
 `"${HOME}/.lightning"` containing Core Lightning's data and
 `"${HOME}/.config/lightning"` containing a `lightningd.conf` should be fine.
 
-If you wire in additional plugins, do see to it that plugins needing
-compilation are statically built. Python plugins need not to be worried about
-in this sense (unless you do something exotic like pre-generating byte code).
-In the case of Python plugins, you do need to see to it that all requirements
+When wiring in additional plugins, one needs to be mindful about the plugins
+being statically built. Python plugins need not to be worried about in this
+sense (unless one does something exotic like pre-generating byte code).
+In the case of Python plugins, one does need to see to it that all requirements
 are available in the container. One way of installing requirements is to use a
 `pre-start.d` script (see the section on this below, and the
 `examples/.pre-start.d/01-install-python-deps.sh` file).
@@ -150,7 +191,8 @@ docker compose -f docker-compose.yml -f docker-compose.maintenance.yml \
 Doing this for a foreign architecture, for e.g. compiling plugins for a weaker
 device on a stronger one, is possible by prepending the above command with
 `DOCKER_DEFAULT_PLATFORM=<platform>` - given that an image has been built for
-that platform. E.g.
+that platform. E.g., if for instance the current platform is say amd64 and one
+wants to compile stuff for aarch64:
 ```
 DOCKER_DEFAULT_PLATFORM=linux/aarch64 docker compose -f docker-compose.yml \
     -f docker-compose.maintenance.yml run --rm core-lightning
@@ -178,9 +220,13 @@ There are several ways to do this. Here we list two:
   `bitcoin-rpcconnect` and `bitcoin-rpcport` can be set to their common
   values; `127.0.0.1` and `8332`, respectively.
 
-In addition to wiring access to the daemon in, you also need to set
-`bitcoin-rpcuser` and `bitcoin-rpcpassword` to the username and password
-combination that the bitcoin daemon expects.
+In addition to wiring access to the daemon in, you also need to set the
+credentials needed for making requests. This can also be done by either
+setting the docker environment variables `NETWORK_RPCD_USER` and
+`NETWORK_RPCD_PASSWORD` together with `NETWORK_RPCD_AUTH_SET=true`, or by
+setting `bitcoin-rpcuser` and `bitcoin-rpcpassword` directly in the
+configuration file together with setting the docker environment variable
+`NETWORK_RPCD_AUTH_SET` to `false`.
 
 ### Tor
 To have access to a Tor daemon in the container you need to wire that in as
@@ -204,6 +250,11 @@ Another option is to set neither `TOR_SOCKSD` nor `TOR_CTRLD`, and instead
 setting `addr` to point to the from-container-reachable control port of the Tor
 daemon (if control is needed), and `proxy` the from-container-reachable socks
 port in Core Lightning's daemon config, respectively.
+
+#### Tor Authentication
+For some Tor operations authentication is needed. This can be supplied either
+by setting the docker environment variable `TOR_SERVICE_PASSWORD`, or by
+directly setting `tor-service-password` in Core Lightning's daemon config.
 
 ## .env.d
 Files in the `${LIGHTNINGD_DATA}/.env.d` are sourced by the root user in the
@@ -231,6 +282,8 @@ together with other clboss configuration (if any) to your wired-in core
 lightning config. Remember that clboss is included in the image, and so
 `/usr/local/bin/clboss` is not referring to your local filesystem.
 
+Note that this is the default in the bundled configuration file.
+
 ## Core-Lightning-REST & Ride The Lightning
 Core-Lightning-REST & Ride The Lightning are automatically set up.
 
@@ -253,29 +306,38 @@ while RTL's should be wired in to `${LIGHTNINGD_HOME}/.config/RTL`.
 Note that configuration via the environment will cease to work if user
 configuration files are wired in.
 
-## docker run example (for the Debian-based x86_64 image)
+## docker run example (for the Debian-based image)
+Assuming that the current working directory is the top level of the clone of
+this repository and that the image built only has the `latest` tag,
+a reasonable example ought to be:
 ```
-$ docker run --name core-lightning --restart=no --network=bridge -d \
+$ docker run --rm --name core-lightning --restart=no --network=bridge -d \
     -e EXPOSE_TCP_RPC=true \
-    -v "${HOME}/.lightning":"/home/lightning/.lightning" \
-    -v "${HOME}/.config/lightning":"/home/lightning/.config/lightning" \
+    -v "lightning":"/home/lightning/.lightning" \
+    -v "config-lightning":"/home/lightning/.config/lightning" \
     -p 127.0.0.1:9835:9835 -p 0.0.0.0:9735:9735 -p 127.0.0.1:3000:3000 \
     --add-host=host.docker.internal:host-gateway \
     -e NETWORK_RPCD=host.docker.internal:8332 \
-    -e TOR_SOCKSD=host.docker.internal:9050 \
-    -e TOR_CTRLD=host.docker.internal:9150 \
-    local/core-lightning:amd64-latest
+    -e NETWORK_RPCD_AUTH_SET=true \
+    -e NETWORK_RPCD_USER="<USER>" \
+    -e NETWORK_RPCD_PASSWORD="<PASSWORD>" \
+    core-lightning:latest
 ```
 
+This would start Core Lightning with CLBOSS, Core-Lightning-REST and
+Ride The Lightning enabled, but with only clearnet support
+(as `TOR_SOCKSD`, `TOR_CTRLD` and `TOR_SERVICE_PASSWORD` are unset).
+
 ## docker-compose
-There is a `docker-compose.xml` that can be used for inspiration.
+There is template `docker-compose.yml` with some comments that aim to help
+with getting started.
 
 ## Future work (feel free to make pull requests)
-* Add sensible `lightningd.conf` that should work out of the box.
 * Extend running configuration to include a ProtonVPN container with
 port-forwarding
-* Add images to image repository for others to download.
 * Add reference to containerized Bitcoin daemon and provide instructions for
 interoperation.
 * Add reference to containerized Tor daemon and provide instructions for
 interoperation.
+* Add images to image repository for others to download (although the image
+is quite large, so perhaps this will remain as a built-it-yourself image).

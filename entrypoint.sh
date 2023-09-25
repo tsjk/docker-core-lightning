@@ -2,6 +2,8 @@
 
 : "${DO_CHOWN:=true}"
 : "${EXPOSE_TCP_RPC:=false}"
+: "${NETWORK_RPCD_AUTH_SET:=false}"
+: "${CLBOSS:=true}"
 : "${START_CL_REST:=true}"
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
@@ -34,7 +36,17 @@ if [[ "${1}" == "lightningd" ]]; then
     set -- "${LIGHTNINGD}" --conf="${LIGHTNINGD_CONFIG_FILE}" "${@:2}"
   fi
   [[ -s "${LIGHTNINGD_CONFIG_FILE}" ]] || \
-    __error "\"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized! You need to wire in your own Core Lightning configuration."
+    __error "Refusing to start; \"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized."
+
+  [[ "${NETWORK_RPCD_AUTH_SET}" != "false" ]] || \
+    __error "Refusing to start; NETWORK_RPCD_AUTH_SET is set to \"false\"."
+
+  if [[ "${NETWORK_RPCD_AUTH_SET}" == "true" ]]; then
+    sed -i 's@^bitcoin-rpcuser=.*@bitcoin-rpcuser='"${NETWORK_RPCD_USER}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update bitcoin-rpcuser in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    sed -i 's@^bitcoin-rpcpassword=.*@bitcoin-rpcpassword='"${NETWORK_RPCD_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update bitcoin-rpcpassword in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  fi
 fi
 
 
@@ -43,9 +55,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     { [[ $(getent group lightning | cut -d ':' -f 3) -eq ${PGID} ]] || gruopmod --non-unique --gid ${PGID} lightning; } && \
       { [[ $(getent passwd lightning | cut -d ':' -f 3) -eq ${PUID} ]] || usermod --non-unique --uid ${PUID} lightning; } || \
       __error "Failed to change uid or gid or \"lightning\" user."; fi
-  [[ "${DO_CHOWN}" != "true" ]] || \
-    { [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}"; } || \
-      __error "chown -R lightning:lightning \"${LIGHTNINGD_HOME}\" - returned with error"
+  [[ "${DO_CHOWN}" != "true" ]] || { \
+    [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}" || \
+      __error "Failed to do chown on \"${LIGHTNINGD_HOME}\"."; }
 
   if [[ -d "${LIGHTNINGD_DATA}/.env.d" && $(find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | wc -l) -gt 0 ]]; then
     find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | sort | while read -r; do
@@ -69,6 +81,23 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Found non-executable file \"${f}\"! Either make it executable, or remove it."
       fi
     done
+  fi
+
+  if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i 's@^#plugin=/usr/local/bin/clboss@plugin=/usr/local/bin/clboss@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to enable CLBOSS."
+  elif [[ "${CLBOSS}" == "false" ]] && grep -q -E '^plugin=/usr/local/bin/clboss' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i 's@^plugin=/usr/local/bin/clboss@#plugin=/usr/local/bin/clboss@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to disable CLBOSS."
+  fi
+
+  if [[ -n "${TOR_SOCKSD}" ]]; then
+    sed -i 's@^(#)?proxy=.*@proxy='"${TOR_SOCKSD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update proxy in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  fi
+  if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
+    sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
 
   [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 `cat /tmp/socat-network_rpc.pid` > /dev/null 2>&1; } || {
