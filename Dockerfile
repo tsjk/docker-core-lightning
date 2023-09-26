@@ -305,6 +305,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         qemu-user-static \
         socat \
         tor \
+        torsocks \
         wget \
         zlib1g && \
     apt-get install -qq -y --no-install-recommends    `# 'CLBOSS dependencies'` \
