@@ -160,7 +160,10 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     START_RTL="false"
   fi
 
+  shift 1
   [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
+
+  [[ -z "${LIGHTNINGD_NETWORK}" ]] || set -- --network="${LIGHTNINGD_NETWORK}" "${@}"
 
   if [[ "${OFFLINE}" == "true" ]]; then
     __warning "Will start Core Lightning in off-line mode."
@@ -170,9 +173,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
     set -m
 
-    set -- "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec ${*}" - lightning &
-    echo "Core-Lightning starting..."
-    while read -r i; do if [[ "${i}" == "lightning-rpc" ]]; then break; fi
+    set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning &
+    LIGHTNINGD_PID=${!}; echo "Core-Lightning starting..."
+    while read -r i; do
+      kill -0 ${LIGHTNINGD_PID} || __error "Failed to start Core-Lightning."
+      if [[ "${i}" == "lightning-rpc" ]]; then break; fi
     done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
     echo "Core-Lightning started."
     if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
@@ -202,7 +207,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
     fg %-
   else
-    shift 1; su-exec lightning "${LIGHTNINGD}" --network="${LIGHTNINGD_NETWORK}" "${@}"
+    ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
   fi
 else
   exec "${@}"
