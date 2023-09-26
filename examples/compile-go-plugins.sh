@@ -1,9 +1,9 @@
 #!/bin/sh
 
 case "$(uname -m)" in
-  "x86_64") __GO_URL="https://go.dev/dl/go1.18.10.linux-amd64.tar.gz" ;;
-  "aarch64") __GO_URL="https://go.dev/dl/go1.18.10.linux-arm64.tar.gz" ;;
-  "armv7l") __GO_URL="https://go.dev/dl/go1.10.10.linux-armv6l.tar.gz" ;;
+  "x86_64") __GO_URL="https://go.dev/dl/go1.21.1.linux-amd64.tar.gz" ;;
+  "aarch64") __GO_URL="https://go.dev/dl/go1.21.1.linux-arm64.tar.gz" ;;
+  "armv7l") __GO_URL="https://go.dev/dl/go1.12.1.linux-armv6l.tar.gz" ;;
   *) echo "ERROR: Unsupported machine type: $(uname -m)."; exit 1  ;; \
 esac
 
