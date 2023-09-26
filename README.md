@@ -274,6 +274,15 @@ is started. If a script ought be executed by a different user, one can always
 Suitable use cases include installing plugin dependencies, and carrying out
 other chores.
 
+## .post-start.d
+Executable files with the `.sh` suffix in the
+`${LIGHTNINGD_DATA}/.post-start.d` directory are executed by the root user in
+the container after Core Lightning has started. If a script ought be executed
+by a different user, one can always `su` that user in the script.
+
+Suitable use cases include carrying out chores that require a running
+Core Lightning deamon.
+
 ## CLBOSS
 To use clboss, add
 
