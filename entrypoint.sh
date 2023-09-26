@@ -176,7 +176,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning &
     LIGHTNINGD_PID=${!}; echo "Core-Lightning starting..."
     while read -r i; do
-      kill -0 ${LIGHTNINGD_PID} || __error "Failed to start Core-Lightning."
+      kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core-Lightning."
       if [[ "${i}" == "lightning-rpc" ]]; then break; fi
     done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
     echo "Core-Lightning started."
@@ -196,8 +196,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       if grep -q -E '<RTL-MACAROON-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
         mkdir "/tmp/RTL-macaroon" && \
           cp -a "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs/access.macaroon" "/tmp/RTL-macaroon/" && \
-            sed -i 's@<RTL-MACAROON-PATH>@/tmp/RTL-macaroon@' "${RTL_CONFIG_FILE}" || \
-           { __warning "Failed to set macaroon for RTL. Will hence not start RTL."; START_RTL="false"; }
+          sed -i 's@<RTL-MACAROON-PATH>@/tmp/RTL-macaroon@' "${RTL_CONFIG_FILE}" || \
+         { __warning "Failed to set macaroon for RTL. Will hence not start RTL."; START_RTL="false"; }
       fi
       if [[ "${START_RTL}" == "true" ]]; then
         echo "Starting RTL."

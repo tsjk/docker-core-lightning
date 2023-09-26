@@ -297,6 +297,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         git \
         inotify-tools \
         libpq5 \
+        jq \
         openssl \
         python3.9 \
         python3-pip \
