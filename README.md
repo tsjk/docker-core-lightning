@@ -3,8 +3,9 @@ Dockerfile with multi-platorm support (linux/amd64, linux/arm64, and linux/arm32
 v7) for building a container with core-lightning and clboss.
 
 # Status
-This is a work in progress, but it might already be useful - for inspiration at
-least.
+This is a work in progress, but it ought already be useful. The author uses
+this project to run his Core Lightning node, and it should thus be possible
+to do so for others as well.
 
 Although the aim of this project is to just work out of the box, it hasn't
 reached a mature state. For now it is assumed that the user knows her way
