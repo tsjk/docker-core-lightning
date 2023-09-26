@@ -337,8 +337,12 @@ RUN apt-get install -qq -y --no-install-recommends \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs" ) && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL" && \
+    mkdir -p "${LIGHTNINGD_HOME}/.config/RTL/channel-backup" && \
+    mkdir -p "${LIGHTNINGD_HOME}/.config/RTL/logs" && \
     ( cd /usr/local/RTL && \
-        ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" ) && \
+        ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" && \
+        ln -s "${LIGHTNINGD_HOME}/.config/RTL/channels-backup" && \
+        ln -s "${LIGHTNINGD_HOME}/.config/RTL/logs" ) && \
     chown -R -h lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
     chown -R -h lightning:lightning "${LIGHTNINGD_DATA}" && \
