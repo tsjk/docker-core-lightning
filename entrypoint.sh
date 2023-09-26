@@ -83,6 +83,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     done
   fi
 
+  if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
+    for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
+      if [[ ! -x "${f}" ]]; then
+        __error "Found non-executable file \"${f}\"! Either make it executable, or remove it."
+      fi
+    done
+  fi
+
   if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i 's@^#plugin=/usr/local/bin/clboss@plugin=/usr/local/bin/clboss@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to enable CLBOSS."
@@ -180,6 +188,15 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       if [[ "${i}" == "lightning-rpc" ]]; then break; fi
     done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
     echo "Core-Lightning started."
+
+    if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
+      for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
+        echo "--- Executing \"${f}\":"
+        "${f}" || __warning "\"${f}\" exited with error code ${?}."
+        echo "--- Finished executing \"${f}\"."
+      done
+    fi
+
     if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
       echo "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
