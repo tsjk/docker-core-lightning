@@ -304,6 +304,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         python3-wheel \
         qemu-user-static \
         socat \
+        tor \
         wget \
         zlib1g && \
     apt-get install -qq -y --no-install-recommends    `# 'CLBOSS dependencies'` \
