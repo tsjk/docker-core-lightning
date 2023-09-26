@@ -332,7 +332,7 @@ RUN apt-get install -qq -y --no-install-recommends \
     mkdir -p "${LIGHTNINGD_HOME}/.config/c-lightning-REST" && \
     ( cd /usr/local/c-lightning-REST && \
         ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
-        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json/certs" ) && \
+        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs" ) && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL" && \
     ( cd /usr/local/RTL && \
         ln -s "${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json" ) && \
