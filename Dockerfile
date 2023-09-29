@@ -224,7 +224,7 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-RUN set -ex && apt-get install -qq --no-install-recommends ca-certificates wget
+RUN set -ex && apt-get install -qq --no-install-recommends ca-certificates patch patchutils wget
 
 # c-lightning-REST
 RUN mkdir -p /tmp/c-lightning-REST_install/usr/local && \
@@ -236,6 +236,8 @@ RUN mkdir -p /tmp/c-lightning-REST_install/usr/local && \
     rm c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
     mv c-lightning-REST-${C_LIGHTNING_REST_VERSION} c-lightning-REST && \
     cd c-lightning-REST && \
+    wget -qO- 'https://github.com/Ride-The-Lightning/c-lightning-REST/compare/v0.10.3...v0.10.4.patch' | \
+      filterdiff -i '*controllers/localRemoteBal.js' | patch -p1 && \
     npm install --omit=dev
 
 # RTL
