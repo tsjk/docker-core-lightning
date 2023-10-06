@@ -181,12 +181,16 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
     set -m
 
+    rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
     set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning &
-    LIGHTNINGD_PID=${!}; echo "Core-Lightning starting..."
-    while read -r i; do
+    LIGHTNINGD_PID=${!}; echo "Core-Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)) LIGHTNINGD_RPC_SOCKET_NOTIFIED=0
+    while true; do
+      t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
+      i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
       kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core-Lightning."
-      if [[ "${i}" == "lightning-rpc" ]]; then break; fi
-    done < <(inotifywait -e create,open --format '%f' --quiet "${NETWORK_DATA_DIRECTORY}" --monitor)
+      if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET_NOTIFIED=1; break; fi
+      [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to get notification for Core-Lightning RPC socket!"; break; }
+    done
     echo "Core-Lightning started."
 
     if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
@@ -197,7 +201,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       done
     fi
 
-    if [[ "${EXPOSE_TCP_RPC}" == "true" ]]; then
+    if [[ "${EXPOSE_TCP_RPC}" == "true" && ${LIGHTNINGD_RPC_SOCKET_NOTIFIED} -ne 0 ]]; then
       echo "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
     fi
