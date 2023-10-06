@@ -84,6 +84,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   fi
 
   if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
+    START_IN_BACKGROUND="true"
     for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
       if [[ ! -x "${f}" ]]; then
         __error "Found non-executable file \"${f}\"! Either make it executable, or remove it."
@@ -169,7 +170,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   fi
 
   shift 1
-  [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
+  [[ "${START_IN_BACKGROUND}" == "true" ]] || [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
 
   [[ -z "${LIGHTNINGD_NETWORK}" ]] || set -- --network="${LIGHTNINGD_NETWORK}" "${@}"
 
