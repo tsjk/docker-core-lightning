@@ -5,7 +5,9 @@ services:
     build: "."
     image: core-lightning
     container_name: core-lightning
-    network_mode: bridge
+    # network_mode: container:protonwire uses the protonwire
+    # container's network
+    network_mode: container:protonwire
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -45,7 +47,17 @@ services:
 #      TOR_SERVICE_PASSWORD: "<PASSWORD>"
       # Set to enable automatic changes to lightningd's config to make it
       # listen on the forwarded port and announce the PORT_FORWARDING_ADDRESS
-#       PORT_FORWARDING: "true"
-#       PORT_FORWARDING_ADDRESS: "W.X.Y.Z:ABCDE"
+      # PORT_FORWARDING_ADDRESS can also be a bash function which describes
+      # how to get the address. The syntax for this is "() { <code>; }". E.g.:
+      # "() { nc 172.30.0.1 8888; }"
+      # The function should return a string of the form "<ip>:<port>"
+      # The setting of "PROTONWIRE" is special, meaning that it'll be assumed
+      # that the lightning node uses the protonwire container's network and
+      # that it should attempt to figure out the address automatically. It is
+      # equivalent of setting PORT_FORWARDING_ADDRESS to
+      # "() { curl -s 'http://protonwire:1009' | awk -F ':' '(\\$$1 == \"TCP\") { printf(\"%s:%s\", \\$$2, \\$$3); }'; }"
+      PORT_FORWARDING: "true"
+      PORT_FORWARDING_ADDRESS: "PROTONWIRE"
+      ALWAYS_USE_PROXY: "false"
     stop_grace_period: 2m
     restart: "no"

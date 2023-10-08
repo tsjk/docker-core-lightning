@@ -20,7 +20,8 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
     dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 && \
+    apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -101,7 +102,8 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
     dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 && \
+    apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -218,7 +220,8 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
     dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 && \
+    apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -279,7 +282,8 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
     dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 && \
+    apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
