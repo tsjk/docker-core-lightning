@@ -229,6 +229,9 @@ setting `bitcoin-rpcuser` and `bitcoin-rpcpassword` directly in the
 configuration file together with setting the docker environment variable
 `NETWORK_RPCD_AUTH_SET` to `false`.
 
+See e.g. [docker-bitcoin-core](https://github.com/tsjk/docker-bitcoin-core)
+for how to run a Bitcoin Daemon in a container.
+
 ### Tor
 To have access to a Tor daemon in the container you need to wire that in as
 well.
@@ -252,10 +255,26 @@ setting `addr` to point to the from-container-reachable control port of the Tor
 daemon (if control is needed), and `proxy` the from-container-reachable socks
 port in Core Lightning's daemon config, respectively.
 
+See e.g. [tor-relay-docker](https://github.com/tsjk/tor-relay-docker) for how
+to run a Tor client (or a full-blown relay for that matter) in a container.
+
 #### Tor Authentication
 For some Tor operations authentication is needed. This can be supplied either
 by setting the docker environment variable `TOR_SERVICE_PASSWORD`, or by
 directly setting `tor-service-password` in Core Lightning's daemon config.
+
+## Connecting through a VPN
+To be able to protect one's own network while still being able to publish a
+clearnet address, the possibility of running Core Lightning via a port-
+forwarding-able VPN provider has been added. The specific VPN provider that
+should work pretty much out of the box, is ProtonVPN - but the configuration
+ought to be easily adaptable to other providers.
+
+For the easiest setup, the extra component required in this context is
+[protonvpn-docker](https://github.com/tsjk/protonvpn-docker). That sets up a
+ProtonVPN connection in a separate container, which can then be used by the
+current one. Refer to the `docker-compose.vpn.yml` file for a workable
+template.
 
 ## .env.d
 Files in the `${LIGHTNINGD_DATA}/.env.d` are sourced by the root user in the
@@ -303,7 +322,7 @@ is configurable by the `RTL_PORT` environment variable.
 
 Core-Lightning-REST, which RTL depends on, need not be exposed if it's not
 needed for something else. By default its REST and DOC ports are pre-configured
-to be on 49836 and 39837, respectively. These ports are also user configurable
+to be on 49836 and 49837, respectively. These ports are also user configurable
 using the environment variables `C_LIGHTNING_REST_PORT` and
 `C_LIGHTNING_REST_DOCPORT`.
 
@@ -315,6 +334,23 @@ they should be wired in to `${LIGHTNINGD_HOME}/.config/c-lightning-REST`,
 while RTL's should be wired in to `${LIGHTNINGD_HOME}/.config/RTL`.
 Note that configuration via the environment will cease to work if user
 configuration files are wired in.
+
+# Restart support
+When running via a VPN like ProtonVPN, which determines the forwarded port
+per session, it can happen that the port changes while Core Lightning is
+running. There is no support (yet?) for detecting when this happens, but
+monitoring for the occurrence is not difficult.
+
+There is however support for automatically getting what the forwarding
+address currently is before Core Lightning is started (when `protonvpn-docker`
+is used). There is also support for restarting Core Lightning, without
+restarting the entire container, so that the a new forwarding address
+can quickly be changed to. Quick restarts of this type only works when
+`START_IN_BACKGROUND` is set to true, and is carried out by sending a
+`HUP`-signal to the bash-process executing `entrypoint.sh` in the container.
+See [pdmn-ps.functions](https://gist.github.com/tsjk/3f05a70d2f403d6b062561cee0bae37c)
+for inpiration on how to find that process (hopefully this can be made easier
+in the future).
 
 ## docker run example (for the Debian-based image)
 Assuming that the current working directory is the top level of the clone of
@@ -343,11 +379,7 @@ There is template `docker-compose.yml` with some comments that aim to help
 with getting started.
 
 ## Future work (feel free to make pull requests)
-* Extend running configuration to include a ProtonVPN container with
-port-forwarding
-* Add reference to containerized Bitcoin daemon and provide instructions for
-interoperation.
-* Add reference to containerized Tor daemon and provide instructions for
-interoperation.
+* Upgrade Core Lightning to the v23.08 series.
+* Make it easier to respond to changes to the port-forwarding address.
 * Add images to image repository for others to download (although the image
-is quite large, so perhaps this will remain as a built-it-yourself image).
+is quite large, so perhaps this will remain as a build-it-yourself image).

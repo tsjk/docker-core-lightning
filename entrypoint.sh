@@ -259,15 +259,15 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       declare -g -i LIGHTNINGD_PID=0 CL_REST_PID=0 RTL_PID=0
       set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning &
-      LIGHTNINGD_PID=${!}; __info "Core-Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
+      LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
       while true; do
         t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
         i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
-        kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core-Lightning."
+        kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core Lightning."
         if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
-        [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to get notification for Core-Lightning RPC socket!"; break; }
+        [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
       done
-      __info "Core-Lightning started."
+      __info "Core Lightning started."
 
       if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
         for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
