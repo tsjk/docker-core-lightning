@@ -209,8 +209,8 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 # - node builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bullseye-slim as node-builder
 
-ARG C_LIGHTNING_REST_VERSION=0.10.3 \
-    RTL_VERSION=0.14.0
+ARG C_LIGHTNING_REST_VERSION=0.10.7 \
+    RTL_VERSION=0.14.1
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
     echo 'Etc/UTC' > /etc/timezone && \
@@ -239,8 +239,6 @@ RUN mkdir -p /tmp/c-lightning-REST_install/usr/local && \
     rm c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
     mv c-lightning-REST-${C_LIGHTNING_REST_VERSION} c-lightning-REST && \
     cd c-lightning-REST && \
-    wget -qO- 'https://github.com/Ride-The-Lightning/c-lightning-REST/compare/v0.10.3...v0.10.4.patch' | \
-      filterdiff -i '*controllers/localRemoteBal.js' | patch -p1 && \
     npm install --omit=dev
 
 # RTL
