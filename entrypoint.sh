@@ -147,14 +147,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       echo $! > /tmp/socat-network_rpc.pid
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-network_rpc.pid) > /dev/null 2>&1 || __error "Failed to setup socat for crypto daemon's rpc service"; }
-      # shellcheck disable=SC2046
+  # shellcheck disable=SC2046
   [[ -z "${TOR_SOCKSD}" ]] || { [[ -e /tmp/socat-tor_socks.lock ]] && [[ -e /tmp/socat-tor_socks.pid ]] && kill -0 $(cat /tmp/socat-tor_socks.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_socks.lock /tmp/socat-tor_socks.pid
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_socks.lock TCP4-LISTEN:9050,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_SOCKSD}" - lightning &
       echo $! > /tmp/socat-tor_socks.pid
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_socks.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor SOCKS service"; }
-      # shellcheck disable=SC2046
+  # shellcheck disable=SC2046
   [[ -z "${TOR_CTRLD}" ]] || { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 $(cat /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_ctrl.lock /tmp/socat-tor_ctrl.pid
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" - lightning &

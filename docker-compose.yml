@@ -37,6 +37,8 @@ services:
       # Set if you want use Tor and want to have socat proxies to the Tor
       # daemon's socks and control ports:
 #      TOR_SOCKSD: "host.docker.internal:9050"
+      # Note that configuring the control port to be proxied requires forwarding
+      # of the incoming lightning connections on to Tor host to this container!
 #      TOR_CTRLD: "host.docker.internal:9051"
       # Set if you need to authenticate for some Tor operations and want the
       # container's init script to update the Core Lightning configuration

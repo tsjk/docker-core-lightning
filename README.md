@@ -243,7 +243,9 @@ There is support for wiring in access to the Tor deamon using socat processes.
 This is enabled by setting the docker environment variables `TOR_SOCKSD` and
 `TOR_CTRLD`. Both of these are expected to be formatted as `<host>:<port>`.
 These addresses are then mapped to `127.0.0.1:9050` and `127.0.0.1:9051`,
-respectively.
+respectively. Note however, that for successful handling of incoming Tor
+connections, one needs to forward these connections from the Tor host to the
+container.
 
 If you have your hidden service declared in your `torrc`, have
 `lightningd.conf`'s `addr` setting independent of Tor, and only use Tor as
