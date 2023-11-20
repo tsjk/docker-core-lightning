@@ -381,7 +381,8 @@ There is template `docker-compose.yml` with some comments that aim to help
 with getting started.
 
 ## Future work (feel free to make pull requests)
-* Upgrade Core Lightning to the v23.08 series.
+* Upgrade Core Lightning to the v23.11 series when the ecosystem has
+  stabilized.
 * Make it easier to respond to changes to the port-forwarding address.
 * Add images to image repository for others to download (although the image
 is quite large, so perhaps this will remain as a build-it-yourself image).

@@ -6,7 +6,7 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 
 # - downloader -
-FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bullseye-slim as downloader
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as downloader
 
 ARG TARGETPLATFORM
 
@@ -45,7 +45,7 @@ RUN { case ${TARGETPLATFORM} in \
     && chmod +x /tini
 
 # install bitcoin binaries
-ARG BITCOIN_VERSION=23.0
+ARG BITCOIN_VERSION=25.1
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
          "linux/arm64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
@@ -84,13 +84,12 @@ RUN { case ${TARGETPLATFORM} in \
 
 
 # - builder -
-FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bullseye-slim as builder
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v23.05.2 \
+    LIGHTNINGD_VERSION=v23.08.1 \
     DEVELOPER=1 \
-    EXPERIMENTAL_FEATURES=1 \
-    CLBOSS_GIT_HASH=9dc326afbcca6826c183cbc704c04a763a07e8d6
+    CLBOSS_GIT_HASH=0673c50e7374ea8f5cb7e302f72b7978c6bd1794
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -110,7 +109,8 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 ENV PYTHON_VERSION=3 \
-    PYTHONPATH=/usr/lib/python3.9/site-packages \
+    PYTHON_VERSION_FULL=3.11
+ENV PYTHONPATH=/usr/lib/python${PYTHON_VERSION_FULL}/site-packages \
     PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
@@ -134,13 +134,13 @@ RUN apt-get install -qq -y --no-install-recommends \
         libtool \
         pkg-config \
         protobuf-compiler \
-        python3-dev \
-        python3-mako \
-        python3-pip \
-        python3-setuptools \
-        python3-venv \
-        python3-wheel \
-        python3.9 \
+        python${PYTHON_VERSION_FULL} \
+        python${PYTHON_VERSION}-dev \
+        python${PYTHON_VERSION}-mako \
+        python${PYTHON_VERSION}-pip \
+        python${PYTHON_VERSION}-setuptools \
+        python${PYTHON_VERSION}-venv \
+        python${PYTHON_VERSION}-wheel \
         qemu-user-static \
         wget\
         zlib1g \
@@ -159,20 +159,20 @@ ENV RUST_PROFILE=release \
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     rustup toolchain install stable --component rustfmt --allow-downgrade
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
-    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python3 - && \
-    { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || rm /usr/lib/python3.9/EXTERNALLY-MANAGED; }
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
+    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python${PYTHON_VERSION} - && \
+    { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; }
 
 RUN export PATH="/root/.local/bin:$PATH" && \
     cd /tmp && \
     git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
     cd /tmp/lightning && \
     pip3 wheel cryptography && \
+    pip3 install --prefix=/usr grpcio-tools && \
     poetry env use system && \
     poetry install && \
     ./configure --prefix=/usr/local \
       --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
-      --$( [ ${EXPERIMENTAL_FEATURES} -ne 0 ] && echo enable || echo disable)-experimental-features \
       --disable-address-sanitizer \
       --disable-compat \
       --disable-fuzzing \
@@ -181,9 +181,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
       --enable-rust \
       --enable-static && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-    poetry run make DESTDIR=/tmp/lightning_install install && \
-    { [ ! -d ./plugins/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
-    { [ ! -d ./contrib/pyln-client ] || pip3 install --prefix=/usr ./contrib/pyln-client; }
+    poetry run make DESTDIR=/tmp/lightning_install install
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -207,7 +205,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 
 
 # - node builder -
-FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bullseye-slim as node-builder
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
 
 ARG C_LIGHTNING_REST_VERSION=0.10.7 \
     RTL_VERSION=0.14.1
@@ -256,9 +254,9 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 
 
 # - final -
-FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bullseye-slim as final
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v23.05.2 \
+ARG LIGHTNINGD_VERSION=v23.08.1 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
@@ -292,7 +290,8 @@ COPY --from=node-builder /tmp/c-lightning-REST_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
-    PYTHONPATH=/usr/lib/python3.9/site-packages \
+    PYTHON_VERSION_FULL=3.11
+ENV PYTHONPATH=/usr/lib/python${PYTHON_VERSION_FULL}/site-packages \
     PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
@@ -303,10 +302,10 @@ RUN apt-get install -qq -y --no-install-recommends \
         libpq5 \
         jq \
         openssl \
-        python3.9 \
-        python3-pip \
-        python3-setuptools \
-        python3-wheel \
+        python${PYTHON_VERSION_FULL} \
+        python${PYTHON_VERSION}-pip \
+        python${PYTHON_VERSION}-setuptools \
+        python${PYTHON_VERSION}-wheel \
         qemu-user-static \
         socat \
         tor \
@@ -320,15 +319,10 @@ RUN apt-get install -qq -y --no-install-recommends \
         libsqlite3-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
-    { [ ! -f /usr/lib/python3.9/EXTERNALLY-MANAGED ] || \
-        rm /usr/lib/python3.9/EXTERNALLY-MANAGED; } && \
-    cd /tmp && \
-    git clone --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
-    cd /tmp/lightning && \
-    { [ ! -d ./plugins/clnrest ] || pip3 install --prefix=/usr -r ./plugins/clnrest/requirements.txt; } && \
-    { [ ! -d ./contrib/pyln-client ] || pip3 install --prefix=/usr ./contrib/pyln-client; } && \
-    cd / && rm -rf /tmp/lightning && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
+    { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || \
+        rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
+    pip3 install --prefix=/usr grpcio-tools && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
