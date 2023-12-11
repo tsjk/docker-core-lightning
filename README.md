@@ -15,10 +15,6 @@ these assumptions may be relaxed.
 Currently, building for the platforms linux/amd64 and linux/arm64 have been
 tested.
 
-The Dockerfile based on Gentoo (`Dockerfile.gentoo`) is much less developed at
-the moment. If you want to try this out, go for using the one based on Debian
-(`Dockerfile`).
-
 # Building
 I for one usually build my images with Buildah these days. So, these
 instructions assume you do as well.
@@ -152,11 +148,10 @@ TCP port 9835. This port can the be exposed by adding a
 To run, you'll need to wire in a few things.
 
 ### Persistent storage
-Assuming that the Debian-based image is used, mapping a host directory to
-Core Lightning's data directory (having the default setting of
-`/home/lightning/.lightning`) and one to it's configuration directory
-(having the default setting of `/home/lightning/.config/lightning`) in
-the container is sufficient. Note that the configuration file name should be
+Mapping a host directory to Core Lightning's data directory (having the default
+setting of `/home/lightning/.lightning`) and one to it's configuration
+directory (having the default setting of `/home/lightning/.config/lightning`)
+in the container is sufficient. Note that the configuration file name should be
 `lightningd.conf`. While the `docker-compose.yml` does define defaults here,
 one might want to wire in different directories when migrating an existing
 non-containerized setup to a containerized one.  E.g., adding
@@ -354,7 +349,7 @@ See [pdmn-ps.functions](https://gist.github.com/tsjk/3f05a70d2f403d6b062561cee0b
 for inpiration on how to find that process (hopefully this can be made easier
 in the future).
 
-## docker run example (for the Debian-based image)
+## docker run example
 Assuming that the current working directory is the top level of the clone of
 this repository and that the image built only has the `latest` tag,
 a reasonable example ought to be:
