@@ -131,10 +131,6 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       __error "Failed to disable CLBOSS."
   fi
 
-  if [[ -n "${TOR_SOCKSD}" ]]; then
-    sed -i 's@^(#)?proxy=.*@proxy='"${TOR_SOCKSD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
-      __error "Failed to update proxy in \"${LIGHTNINGD_CONFIG_FILE}\"."
-  fi
   if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
     sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
