@@ -254,7 +254,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fi
 
       declare -g -i LIGHTNINGD_PID=0 CL_REST_PID=0 RTL_PID=0
-      set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning &
+      set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
       while true; do
         t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
@@ -301,7 +301,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fi
 
       __info "Foregrounding Core Lightning."
-      fg %-
+      fg '%?core-lightning'
 
       [[ ${RTL_PID} -eq 0 ]] || kill "${RTL_PID}"
       [[ ${CL_REST_PID} -eq 0 ]] || kill "${CL_REST_PID}"
