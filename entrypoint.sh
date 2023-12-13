@@ -66,7 +66,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then
     # shellcheck disable=SC2015,SC2086
-    { [[ $(getent group lightning | cut -d ':' -f 3) -eq ${PGID} ]] || gruopmod --non-unique --gid ${PGID} lightning; } && \
+    { [[ $(getent group lightning | cut -d ':' -f 3) -eq ${PGID} ]] || groupmod --non-unique --gid ${PGID} lightning; } && \
       { [[ $(getent passwd lightning | cut -d ':' -f 3) -eq ${PUID} ]] || usermod --non-unique --uid ${PUID} lightning; } || \
       __error "Failed to change uid or gid or \"lightning\" user."; fi
   [[ "${DO_CHOWN}" != "true" ]] || { \
