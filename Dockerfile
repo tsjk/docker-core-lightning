@@ -87,8 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v23.08.1 \
-    DEVELOPER=1 \
+    LIGHTNINGD_VERSION=v23.11.2 \
     CLBOSS_GIT_HASH=0673c50e7374ea8f5cb7e302f72b7978c6bd1794
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -155,6 +154,7 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
     chmod 0755 "${SUEXEC_BINARY}"
 
 ENV RUST_PROFILE=release \
+    CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     rustup toolchain install stable --component rustfmt --allow-downgrade
@@ -172,12 +172,12 @@ RUN export PATH="/root/.local/bin:$PATH" && \
     poetry env use system && \
     poetry install && \
     ./configure --prefix=/usr/local \
-      --$( [ ${DEVELOPER} -ne 0 ] && echo enable || echo disable)-developer \
       --disable-address-sanitizer \
       --disable-compat \
       --disable-fuzzing \
       --disable-ub-sanitize \
       --disable-valgrind \
+      --enable-debugbuild \
       --enable-rust \
       --enable-static && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
@@ -207,8 +207,7 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
 # - node builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
 
-ARG C_LIGHTNING_REST_VERSION=0.10.7 \
-    RTL_VERSION=0.14.1
+ARG RTL_VERSION=0.15.0
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
     echo 'Etc/UTC' > /etc/timezone && \
@@ -227,18 +226,6 @@ ENV LANG=en_US.UTF-8 \
 
 RUN set -ex && apt-get install -qq --no-install-recommends ca-certificates patch patchutils wget
 
-# c-lightning-REST
-RUN mkdir -p /tmp/c-lightning-REST_install/usr/local && \
-    cd /tmp/c-lightning-REST_install/usr/local && \
-    wget -q --timeout=60 --waitretry=0 --tries=8 \
-      -O ./c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz \
-      "https://github.com/Ride-The-Lightning/c-lightning-REST/archive/refs/tags/v${C_LIGHTNING_REST_VERSION}.tar.gz" && \
-    tar xf c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
-    rm c-lightning-REST-v${C_LIGHTNING_REST_VERSION}.tar.gz && \
-    mv c-lightning-REST-${C_LIGHTNING_REST_VERSION} c-lightning-REST && \
-    cd c-lightning-REST && \
-    npm install --omit=dev
-
 # RTL
 RUN mkdir -p /tmp/RTL_install/usr/local && \
     cd /tmp/RTL_install/usr/local && \
@@ -256,15 +243,14 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v23.08.1 \
+ARG LIGHTNINGD_VERSION=v23.11.2 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     LIGHTNINGD_NETWORK=bitcoin \
     LIGHTNINGD_RPC_PORT=9835 \
     LIGHTNINGD_PORT=9735 \
-    C_LIGHTNING_REST_PORT=49836 \
-    C_LIGHTNING_REST_DOCPORT=49837 \
+    CLNREST_PORT=3010 \
     RTL_PORT=3000 \
     TOR_SOCKSD="" \
     TOR_CTRLD="" \
@@ -286,7 +272,6 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 COPY ./entrypoint.sh /entrypoint.sh
-COPY --from=node-builder /tmp/c-lightning-REST_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
@@ -330,10 +315,6 @@ RUN apt-get install -qq -y --no-install-recommends \
       --shell /bin/bash --uid ${LIGHTNINGD_UID} lightning && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/lightning" && \
     touch "${LIGHTNINGD_HOME}/.config/lightning/lightningd.conf" && \
-    mkdir -p "${LIGHTNINGD_HOME}/.config/c-lightning-REST" && \
-    ( cd /usr/local/c-lightning-REST && \
-        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json" && \
-        ln -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs" ) && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL" && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL/channel-backup" && \
     mkdir -p "${LIGHTNINGD_HOME}/.config/RTL/logs" && \
@@ -346,7 +327,6 @@ RUN apt-get install -qq -y --no-install-recommends \
     chown -R -h lightning:lightning "${LIGHTNINGD_DATA}" && \
     rm -rf /tmp/*
 
-COPY ./cl-rest-config.json ${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json
 COPY ./RTL-Config.json ${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json
 RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 

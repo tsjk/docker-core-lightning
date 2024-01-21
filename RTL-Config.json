@@ -14,7 +14,7 @@
       "lnNode": "Core Lightning",
       "lnImplementation": "CLN",
       "Authentication": {
-        "macaroonPath": "<RTL-MACAROON-PATH>",
+        "macaroonPath": "<RTL-RUNE-PATH>",
         "configPath": ""
       },
       "Settings": {

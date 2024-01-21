@@ -4,7 +4,6 @@
 : "${CLBOSS:=true}"
 : "${NETWORK_RPCD_AUTH_SET:=false}"
 : "${PORT_FORWARDING:=false}"
-: "${START_CL_REST:=true}"
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
 : "${EXPOSE_TCP_RPC:=false}"
@@ -173,33 +172,44 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       PORT_FORWARDING__HOST="${PORT_FORWARDING_ADDRESS%%:*}"; PORT_FORWARDING__PORT="${PORT_FORWARDING_ADDRESS##*:}"
       __info "Port forwarding host is \"${PORT_FORWARDING__HOST}\""; __info "Port forwarding port is \"${PORT_FORWARDING__PORT}\""
       sed -i -E '/#\s*<VPN-BIND-ADDR>/{n;s/^#?bind-addr=.*/bind-addr=0.0.0.0:'"${PORT_FORWARDING__PORT}"'/}' "${LIGHTNINGD_CONFIG_FILE}" || \
-        __error "Failed to bind-addr in \"${LIGHTNINGD_CONFIG_FILE}\"."
+        __error "Failed to update bind-addr in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^#?announce-addr=.*/announce-addr='"${PORT_FORWARDING__HOST}"':'"${PORT_FORWARDING__PORT}"'/}' "${LIGHTNINGD_CONFIG_FILE}" || \
-        __error "Failed to bind-addr in \"${LIGHTNINGD_CONFIG_FILE}\"."
+        __error "Failed to update announce-addr in \"${LIGHTNINGD_CONFIG_FILE}\"."
     elif [[ "${PORT_FORWARDING}" != "true" || -z "${PORT_FORWARDING_ADDRESS}" ]]; then
       sed -i -E '/#\s*<VPN-BIND-ADDR>/{n;s/^(bind-addr=.*)/#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
       sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^(announce-addr=.*)/#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
     fi
 
-    CL_REST_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/c-lightning-REST/cl-rest-config.json"
-    if [[ "${START_CL_REST}" == "true" && -s "${CL_REST_CONFIG_FILE}" ]]; then
-      if grep -q -E '<CL_REST_PORT>' "${CL_REST_CONFIG_FILE}"; then
-        sed -i 's@<CL_REST_PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${CL_REST_CONFIG_FILE}" || \
-          __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
-      fi
-      if grep -q -E '<CL_REST_DOCPORT>' "${CL_REST_CONFIG_FILE}"; then
-        sed -i 's@<CL_REST_DOCPORT>@'"${C_LIGHTNING_REST_DOCPORT}"'@' "${CL_REST_CONFIG_FILE}" || \
-          __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
-      fi
-      if grep -q -E '<CL_REST_LNRPCPATH>' "${CL_REST_CONFIG_FILE}"; then
-        sed -i 's@<CL_REST_LNRPCPATH>@'"${NETWORK_DATA_DIRECTORY}"'/lightning-rpc@' "${CL_REST_CONFIG_FILE}" || \
-          __error "Failed to update \"${CL_REST_CONFIG_FILE}\"."
-      fi
-    elif [[ "${START_CL_REST}" == "true" && ! -s "${CL_REST_CONFIG_FILE}" ]]; then
-      __warning "c-lightning-REST configuration file does not exist or is empty. Will hence not start c-lightning-REST."
-      START_CL_REST="false"
+    if [[ -n "${CLNREST_PORT}" && "${CLNREST_PORT}" =~ ^[1-9][0-9]*$ && ${CLNREST_PORT} -gt 0 && ${CLNREST_PORT} -lt 65535 ]]; then
+      sed -i -E 's/(^\s*#)?clnrest-port=.*/clnrest-port='"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to update clnrest-port in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*#(clnrest-protocol=.*)/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to update clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*#(clnrest-host=.*)/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to update clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to comment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      grep -q -E '^\s*clnrest-port=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
+        grep -q -E '^\s*clnrest-protocol=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
+        grep -q -E '^\s*clnrest-host=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
+        ! grep -q -E '^\s*disable-plugin=clnrest\.py' "${LIGHTNINGD_CONFIG_FILE}" ||
+        __error "Failed to apply clnrest plugin configuration to \"${LIGHTNINGD_CONFIG_FILE}\"."
+    else
+      sed -i -E 's/^\s*(clnrest-port=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to comment clnrest-port in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*(clnrest-protocol=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to comment clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*(clnrest-host=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to comment clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      sed -i -E 's/^\s*#(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+        __error "Failed to uncomment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      ! grep -q -E '^\s*clnrest-port=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
+        ! grep -q -E '^\s*clnrest-protocol=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
+        ! grep -q -E '^\s*clnrest-host=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
+        grep -q -E '^\s*disable-plugin=clnrest\.py' "${LIGHTNINGD_CONFIG_FILE}" ||
+        __error "Failed to apply clnrest plugin configuration to \"${LIGHTNINGD_CONFIG_FILE}\"."
+      START_RTL="false"
     fi
-    [[ "${START_CL_REST}" == "true" ]] || START_RTL="false"
 
     RTL_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json"
     if [[ "${START_RTL}" == "true" && -s "${RTL_CONFIG_FILE}" ]]; then
@@ -234,6 +244,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       set -- --offline "${@}"
     fi
 
+    grep -q -E '(^|\s)--allow-deprecated-apis=true(\s|$)' <<< "${*}" || set -- --allow-deprecated-apis=true "${@}"
+    grep -q -E '(^|\s)--developer(\s|$)' <<< "${*}" || set -- --developer "${@}"
+
     if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
       set -m
 
@@ -253,7 +266,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         trap '__sighup_handler' SIGHUP
       fi
 
-      declare -g -i LIGHTNINGD_PID=0 CL_REST_PID=0 RTL_PID=0
+      declare -g -i LIGHTNINGD_PID=0 RTL_PID=0
       set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
       while true; do
@@ -278,20 +291,47 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
       fi
 
-      if [[ "${START_CL_REST}" == "true" ]]; then
-        su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/c-lightning-REST && exec node cl-rest.js' - lightning &
-        CL_REST_PID=${!}; __info "c-lightning-REST starting..."
-        if [[ ! -s "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs/access.macaroon" ]]; then
-          while read -r i; do if [[ "${i}" == "access.macaroon" ]]; then break; fi
-          done < <(inotifywait -e create,open --format '%f' --quiet "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs" --monitor)
-        fi
-        __info "c-lightning-REST started."
-        if grep -q -E '<RTL-MACAROON-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
+      if [[ "${START_RTL}" == "true" ]]; then
+        __wait_for_rpc_liveness() {
+          [[ -n "${LIGHTNINGD_RPC_SOCKET}" ]] || { __warning "Failed to communicate through the Core Lightning RPC socket (LIGHTNINGD_RPC_SOCKET is unset!)"; return 1; }
+          local -i T=$(( $(date '+%s') + 120)) t=0; local NODE_ID=''
+          while [[ -z "${NODE_ID}" ]]; do
+            t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
+            NODE_ID=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" getinfo | jq -r '.id')
+            echo "${NODE_ID}" | grep -q -E '^[0-9a-f]{66}$' || NODE_ID=''
+            [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to communicate through the Core Lightning RPC socket!"; break; }
+            sleep ${t}
+          done
+          [[ -n "${NODE_ID}" ]]
+        }
+        if grep -q -E '<RTL-RUNE-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
+          if __wait_for_rpc_liveness; then
+            if [[ -z "${RTL_RUNE}" ]]; then
+              declare -i RUNE_COUNT=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length')
+              if [[ ${RUNE_COUNT} -eq 0 ]]; then
+                lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" createrune > /dev/null 2>&1
+                if [[ $(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length') -eq 1 ]]; then
+                  RTL_RUNE=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes[0].rune')
+                fi
+              elif [[ ${RUNE_COUNT} -eq 1 ]]; then
+                  RTL_RUNE=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes[0].rune')
+              else
+                __warning "More than one rune exists, and it has not been specified which to use for RTL."
+              fi
+            elif [[ "${RTL_RUNE}" =~ ^[0-9][0-9]*$ ]]; then
+              RTL_RUNE=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r --arg rune_id "${RTL_RUNE}" '.runes[] | select(.unique_id == $rune_id) | .rune')
+            else
+              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}") | jq -r '.runes[].rune' | head -n 1)" == "${RTL_RUNE}" ]] || RTL_RUNE='null'
+            fi
+          else
+            [[ -z "${RTL_RUNE}" || ! "${RTL_RUNE}" =~ ^[0-9][0-9]*$ ]] || RTL_RUNE='null'
+          fi
           # shellcheck disable=SC2015
-          mkdir "/tmp/RTL-macaroon" && \
-            cp -a "${LIGHTNINGD_HOME}/.config/c-lightning-REST/certs/access.macaroon" "/tmp/RTL-macaroon/" && \
-            sed -i 's@<RTL-MACAROON-PATH>@/tmp/RTL-macaroon@' "${RTL_CONFIG_FILE}" || \
-           { __warning "Failed to set macaroon for RTL. Will hence not start RTL."; START_RTL="false"; }
+          [[ -n "${RTL_RUNE}" && "${RTL_RUNE}" != "null" ]] && \
+            touch "/tmp/RTL-rune" && \
+            echo "LIGHTNING_RUNE=\"${RTL_RUNE}\"" > "/tmp/RTL-rune" && \
+            sed -i 's@<RTL-RUNE-PATH>@/tmp/RTL-rune@' "${RTL_CONFIG_FILE}" || \
+           { __warning "Failed to set rune for RTL. Will hence not start RTL."; START_RTL="false"; }
         fi
         if [[ "${START_RTL}" == "true" ]]; then
           __info "Starting RTL."
@@ -304,7 +344,6 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fg '%?core-lightning'
 
       [[ ${RTL_PID} -eq 0 ]] || kill "${RTL_PID}"
-      [[ ${CL_REST_PID} -eq 0 ]] || kill "${CL_REST_PID}"
     else
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
     fi
