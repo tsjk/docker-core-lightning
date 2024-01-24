@@ -14,7 +14,7 @@
       "lnNode": "Core Lightning",
       "lnImplementation": "CLN",
       "Authentication": {
-        "macaroonPath": "<RTL-RUNE-PATH>",
+        "runePath": "<RTL-RUNE-PATH>",
         "configPath": ""
       },
       "Settings": {
@@ -25,7 +25,7 @@
         "logLevel": "INFO",
         "fiatConversion": true,
         "unannouncedChannels": false,
-        "lnServerUrl": "http://127.0.0.1:<RTL-LN-SERVER-PORT>",
+        "lnServerUrl": "https://127.0.0.1:<CLNREST-PORT>",
         "currencyUnit": "EUR"
       }
     }

@@ -216,20 +216,20 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       if grep -q -E '<RTL-PASSWORD>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
         [[ -n "${RTL_PASSWORD}" ]] || RTL_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
         sed -i 's@<RTL-PASSWORD>@'"${RTL_PASSWORD}"'@' "${RTL_CONFIG_FILE}" || \
-          __error "Failed to update \"${RTL_CONFIG_FILE}\"."
+          __error "Failed to update \"${RTL_CONFIG_FILE}\" with generated password."
         __info "RTL password is \"${RTL_PASSWORD}\"."
       fi
       if grep -q -E '<RTL_PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
         sed -i 's@<RTL_PORT>@'"${RTL_PORT}"'@' "${RTL_CONFIG_FILE}" || \
-          __error "Failed to update \"${RTL_CONFIG_FILE}\"."
+          __error "Failed to update \"${RTL_CONFIG_FILE}\" with listening port."
       fi
       if grep -q -E '<RTL-DB-DIRECTORY-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
         sed -i 's@<RTL-DB-DIRECTORY-PATH>@'"${LIGHTNINGD_HOME}"'/.config/RTL@' "${RTL_CONFIG_FILE}" || \
-          __error "Failed to update \"${RTL_CONFIG_FILE}\"."
+          __error "Failed to update \"${RTL_CONFIG_FILE}\" with database directory path."
       fi
-      if grep -q -E '<RTL-LN-SERVER-PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
-        sed -i 's@<RTL-LN-SERVER-PORT>@'"${C_LIGHTNING_REST_PORT}"'@' "${RTL_CONFIG_FILE}" || \
-          __error "Failed to update \"${RTL_CONFIG_FILE}\"."
+      if grep -q -E '<CLNREST-PORT>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
+        sed -i 's@<CLNREST-PORT>@'"${CLNREST_PORT}"'@' "${RTL_CONFIG_FILE}" || \
+          __error "Failed to update \"${RTL_CONFIG_FILE}\" with CLNRest port."
       fi
     elif [[ "${START_RTL}" == "true" && ! -s "${RTL_CONFIG_FILE}" ]]; then
       START_RTL="false"
