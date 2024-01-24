@@ -178,8 +178,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^#?announce-addr=.*/announce-addr='"${PORT_FORWARDING__HOST}"':'"${PORT_FORWARDING__PORT}"'/}' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update announce-addr in \"${LIGHTNINGD_CONFIG_FILE}\"."
     elif [[ "${PORT_FORWARDING}" != "true" || -z "${PORT_FORWARDING_ADDRESS}" ]]; then
-      sed -i -E '/#\s*<VPN-BIND-ADDR>/{n;s/^(bind-addr=.*)/#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
-      sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^(announce-addr=.*)/#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
+      sed -i -E '/#\s*<VPN-BIND-ADDR>/{n;s/^(bind-addr=.*)/\#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
+      sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^(announce-addr=.*)/\#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
     fi
 
     if [[ -n "${CLNREST_PORT}" && "${CLNREST_PORT}" =~ ^[1-9][0-9]*$ && ${CLNREST_PORT} -gt 0 && ${CLNREST_PORT} -lt 65535 ]]; then
