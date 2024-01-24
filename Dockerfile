@@ -177,11 +177,11 @@ RUN export PATH="/root/.local/bin:$PATH" && \
       --disable-fuzzing \
       --disable-ub-sanitize \
       --disable-valgrind \
-      --enable-debugbuild \
       --enable-rust \
       --enable-static && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-    poetry run make DESTDIR=/tmp/lightning_install install
+    poetry run make DESTDIR=/tmp/lightning_install install && \
+    poetry export -o ./requirements.txt --without-hashes --with dev
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -272,6 +272,7 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 COPY ./entrypoint.sh /entrypoint.sh
+COPY --from=builder /tmp/lightning/ /tmp/lightning/
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
@@ -308,6 +309,7 @@ RUN apt-get install -qq -y --no-install-recommends \
     { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || \
         rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
     pip3 install --prefix=/usr grpcio-tools && \
+    pip3 install --prefix=/usr -r /tmp/lightning/requirements.txt && rm -rf /tmp/lightning && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
