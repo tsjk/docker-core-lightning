@@ -185,11 +185,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     if [[ -n "${CLNREST_PORT}" && "${CLNREST_PORT}" =~ ^[1-9][0-9]*$ && ${CLNREST_PORT} -gt 0 && ${CLNREST_PORT} -lt 65535 ]]; then
       sed -i -E 's/(^\s*#)?clnrest-port=.*/clnrest-port='"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update clnrest-port in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*#(clnrest-protocol=.*)/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*#(clnrest-protocol=.*)$/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*#(clnrest-host=.*)/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*#(clnrest-host=.*)$/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*(disable-plugin=clnrest\.py)\s*$/\#\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
       grep -q -E '^\s*clnrest-port=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
         grep -q -E '^\s*clnrest-protocol=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
@@ -197,11 +197,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         ! grep -q -E '^\s*disable-plugin=clnrest\.py' "${LIGHTNINGD_CONFIG_FILE}" ||
         __error "Failed to apply clnrest plugin configuration to \"${LIGHTNINGD_CONFIG_FILE}\"."
     else
-      sed -i -E 's/^\s*(clnrest-port=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*(clnrest-port=.*)/\#\1/'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment clnrest-port in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*(clnrest-protocol=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*(clnrest-protocol=.*)/\#\1/'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*(clnrest-host=.*)/#\1'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*(clnrest-host=.*)/\#\1/'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E 's/^\s*#(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to uncomment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
