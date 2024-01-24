@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+: "${DEVELOPER:=false}"
 : "${DO_CHOWN:=true}"
 : "${CLBOSS:=true}"
 : "${NETWORK_RPCD_AUTH_SET:=false}"
@@ -243,11 +244,12 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
     if [[ "${OFFLINE}" == "true" ]]; then
       __warning "Will start Core Lightning in off-line mode."
-      set -- --offline "${@}"
+      set -- "${@}" --offline
     fi
 
-    grep -q -E '(^|\s)--allow-deprecated-apis=true(\s|$)' <<< "${*}" || set -- --allow-deprecated-apis=true "${@}"
-    grep -q -E '(^|\s)--developer(\s|$)' <<< "${*}" || set -- --developer "${@}"
+    [[ "${DEVELOPER}" != "true" ]] || grep -q -E '(^|\s)--developer(\s|$)' <<< "${*}" || set -- "${@}" --developer
+    [[ "${CLBOSS}" != "true" ]] || ! grep -q -E '^\s*plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
+      grep -q -E '(^|\s)--allow-deprecated-apis=true(\s|$)' <<< "${*}" || set -- "${@}" --allow-deprecated-apis=true
 
     if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
       set -m
