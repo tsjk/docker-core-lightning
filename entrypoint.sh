@@ -122,11 +122,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     fi
   fi
 
-  if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss' "${LIGHTNINGD_CONFIG_FILE}"; then
-    sed -i 's@^#plugin=/usr/local/bin/clboss@plugin=/usr/local/bin/clboss@' "${LIGHTNINGD_CONFIG_FILE}" || \
+  if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
+           -Ee 's@^\s*#(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to enable CLBOSS."
-  elif [[ "${CLBOSS}" == "false" ]] && grep -q -E '^plugin=/usr/local/bin/clboss' "${LIGHTNINGD_CONFIG_FILE}"; then
-    sed -i 's@^plugin=/usr/local/bin/clboss@#plugin=/usr/local/bin/clboss@' "${LIGHTNINGD_CONFIG_FILE}" || \
+  elif [[ "${CLBOSS}" == "false" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
+           -Ee 's@^(\s*)clboss-+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to disable CLBOSS."
   fi
 
