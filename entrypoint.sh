@@ -239,7 +239,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
     [[ "${START_IN_BACKGROUND}" == "true" ]] || [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
 
-    [[ -z "${LIGHTNINGD_NETWORK}" ]] || set -- --network="${LIGHTNINGD_NETWORK}" "${@}"
+    [[ -z "${LIGHTNINGD_NETWORK}" ]] || grep -q -E '^\s*network='"${LIGHTNINGD_NETWORK}"'\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}" || set -- "${@}" --network="${LIGHTNINGD_NETWORK}"
 
     if [[ "${OFFLINE}" == "true" ]]; then
       __warning "Will start Core Lightning in off-line mode."
