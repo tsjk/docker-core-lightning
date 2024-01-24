@@ -127,11 +127,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
            -Ee 's@^\s*#(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to enable CLBOSS."
-  elif [[ "${CLBOSS}" == "false" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
+  elif [[ "${CLBOSS}" != "true" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
            -Ee 's@^(\s*)clboss-+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to disable CLBOSS."
   fi
+
+  { [[ "${CLBOSS}" != "true" ]] && ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; } || \
+    [[ "${DEVELOPER}" != "true" ]] || __error "CLBOSS and DEVELOPER mode are mutually exclusive."
 
   if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
     sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
