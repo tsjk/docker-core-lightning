@@ -326,9 +326,12 @@ password from the container logs.
 
 It is also possible to wire in configuration; one can set the environment
 variable `RTL_RUNE` to use a specific rune for RTL's authentication with Core
-Lightning, and for RTL one can wire in configuration files to
-`${LIGHTNINGD_HOME}/.config/RTL`. Note that if RTL configuration files are
-wired in, configuration via the environment will cease to work.
+Lightning, and in the case RTL one can wire in configuration files to
+`${LIGHTNINGD_HOME}/.config/RTL`. Explicitly setting a rune is required when
+more than one rune has been created. Runes can be set explicitly by either
+setting `RTL_RUNE` to the actual rune, or by setting it to the unique id of the
+rune that is to be used. Note that if RTL configuration files are wired in,
+configuration via the environment will cease to work.
 
 # Restart support
 When running via a VPN like ProtonVPN, which determines the forwarded port
