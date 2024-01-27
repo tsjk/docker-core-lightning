@@ -333,6 +333,16 @@ setting `RTL_RUNE` to the actual rune, or by setting it to the unique id of the
 rune that is to be used. Note that if RTL configuration files are wired in,
 configuration via the environment will cease to work.
 
+### RTL hangs
+It has been observed that RTL hangs from time to time. Therefore, there is
+support for restarting RTL by sending the entrypoint script the `USR1` signal.
+Alternatively, using the `kill` subcommand of the container management tool.
+Eg:
+
+```
+$ docker kill --signal=SIGUSR1 <container>
+```
+
 # Restart support
 When running via a VPN like ProtonVPN, which determines the forwarded port
 per session, it can happen that the port changes while Core Lightning is
@@ -349,6 +359,14 @@ can quickly be changed to. Quick restarts of this type only works when
 See [pdmn-ps.functions](https://gist.github.com/tsjk/3f05a70d2f403d6b062561cee0bae37c)
 for inpiration on how to find that process (hopefully this can be made easier
 in the future).
+
+However, instead of trying to find the host pid of the entrypoint script,
+it should also be possible to use the `kill` subcommand of the container
+management tool to accomplish the same thing. Eg:
+
+```
+$ docker kill --signal=SIGHUP <container>
+```
 
 ## docker run example
 Assuming that the current working directory is the top level of the clone of
