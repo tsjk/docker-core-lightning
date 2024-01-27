@@ -13,6 +13,8 @@
 
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLER=1
+declare -g _SIGHUP_HANDLER_LOCK=$(mktemp -d -u)
+declare -g _SIGUSR1_HANDLER_LOCK=$(mktemp -d -u)
 
 __info() {
   if [[ "${1}" == "-q" ]]; then
@@ -163,6 +165,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
 
+  declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
   while [[ ${DO_RUN} -ne 0 ]]; do
     DO_RUN=0; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
@@ -262,19 +265,25 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
         __sighup_handler() {
           __info "SIGHUP received" >&2
-          if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
-            __info "SIGHUP not handled; location of Core Lightning RPC socket is unknown." >&2
-          elif ! which lightning-cli > /dev/null 2>&1; then
-            __info "SIGHUP not handled; location of Core Lightning CLI is unknown." >&2
+          if mkdir "${_SIGHUP_HANDLER_LOCK}" > /dev/null 2>&1; then
+            if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
+              __warning "SIGHUP not handled; location of Core Lightning RPC socket is unknown."
+            elif ! which lightning-cli > /dev/null 2>&1; then
+              __warning "SIGHUP not handled; location of Core Lightning CLI is unknown."
+            elif [[ -z "$(jobs -p '%?core-lightning' 2> /dev/null)" ]]; then
+              __warning "SIGHUP not handled; Core Lightning seems not to be running."
+            else
+              DO_RUN=1; __info "Handling SIGHUP -- restarting Core Lightning..."
+              lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
+            fi
+            rmdir "${_SIGHUP_HANDLER_LOCK}"
           else
-            DO_RUN=1; __info "Handling SIGHUP -- restarting Core Lightning..." >&2
-            lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
+            __warning "An instance of SIGHUP handler is already running."
           fi
         }
         trap '__sighup_handler' SIGHUP
       fi
 
-      declare -g -i LIGHTNINGD_PID=0 RTL_PID=0
       set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
       while true; do
@@ -296,7 +305,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       if [[ "${EXPOSE_TCP_RPC}" == "true" && -n "${LIGHTNINGD_RPC_SOCKET}" ]]; then
         __info "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
-        su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning &
+        su -s /bin/sh -w "${SU_WHITELIST_ENV}" \
+           -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning $(: cln-rpc-socat) &
+        LIGHTNINGD_RPC_SOCAT_PID=${!}
       fi
 
       if [[ "${START_RTL}" == "true" ]]; then
@@ -347,26 +358,31 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           RTL_PID=${!}; kill -0 ${RTL_PID} > /dev/null 2>&1 && __info "RTL started."
           if ! type __sigusr1_handler > /dev/null 2>&1; then
             __sigusr1_handler() {
-              __info "SIGUSR1 received" >&2
-              if [[ "${START_RTL}" == "true" ]]; then
-                __info "Handling SIGUSR1 -- restarting RTL..." >&2
-                if [[ ${RTL_PID} -gt 0 ]] && kill -0 ${RTL_PID} > /dev/null 2>&1; then
-                  __info "Handling SIGUSR1 -- killing existing RTL instance..." >&2
-                  kill -INT ${RTL_PID}
-                  local T=$(( $(date '+%s') + 60)) t=0
-                  while kill -0 ${RTL_PID} > /dev/null 2>&1; do
-                    t=$(( T - $(date '+s') )); [[ ${t} -lt 2 ]] || t=2
-                    [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to kill running RTL instance!"; return; }
-                    sleep 2
-                  done
-                  __info "Handling SIGUSR1 -- existing RTL instance killed." >&2
+              __info "SIGUSR1 received"
+              if mkdir "${_SIGUSR1_HANDLER_LOCK}" > /dev/null 2>&1; then
+                if [[ "${START_RTL}" == "true" ]]; then
+                  __info "Handling SIGUSR1 -- restarting RTL..." >&2
+                  if [[ ${RTL_PID} -gt 0 ]] && kill -0 ${RTL_PID} > /dev/null 2>&1 && [[ -n "$(pgrep -P ${RTL_PID})" ]]; then
+                    __info "Handling SIGUSR1 -- killing existing RTL instance..."
+                    kill -INT $(pgrep -P ${RTL_PID})
+                    local T=$(( $(date '+%s') + 60)) t=0
+                    while kill -0 ${RTL_PID} > /dev/null 2>&1; do
+                      t=$(( T - $(date '+s') )); [[ ${t} -lt 2 ]] || t=2
+                      [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to kill running RTL instance!"; return; }
+                      sleep 2
+                    done
+                    __info "Handling SIGUSR1 -- existing RTL instance killed."
+                  else
+                    __warning "Handling SIGUSR1 -- no existing RTL instance found."
+                  fi
+                  RTL_PID=0; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
+                  RTL_PID=${!}; kill -0 ${RTL_PID} > /dev/null 2>&1 && __info "Handling SIGUSR1 -- RTL started." >&2
                 else
-                  __warning "Handling SIGUSR1 -- no existing RTL instance found."
+                  __warning "Handling SIGUSR1 -- RTL is disabled."
                 fi
-                RTL_PID=0; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
-                RTL_PID=${!}; kill -0 ${RTL_PID} > /dev/null 2>&1 && __info "Handling SIGUSR1 -- RTL started." >&2
+                rmdir "${_SIGUSR1_HANDLER_LOCK}"
               else
-                __warning "Handling SIGUSR1 -- RTL is disabled."
+                __warning "An instance of SIGUSR1 handler is already running."
               fi
             }
             trap '__sigusr1_handler' SIGUSR1
@@ -374,10 +390,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         fi
       fi
 
-      __info "Foregrounding Core Lightning."
-      fg '%?core-lightning'
+      __info "Entering normal run mode."
+      while [[ -n "$(jobs -p '%?core-lightning' 2> /dev/null)" ]] && kill -0 $(jobs -p '%?core-lightning' 2> /dev/null) > /dev/null 2>&1; do
+        wait $(jobs -p '%?core-lightning'); done
+      __info "Exiting normal run mode; Core Lightning exited."
 
-      [[ ${RTL_PID} -eq 0 ]] || kill "${RTL_PID}"
+      [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || { __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID}); RTL_PID=0; }
+      [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || { kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID}); LIGHTNINGD_RPC_SOCAT_PID=0; }
     else
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
     fi
