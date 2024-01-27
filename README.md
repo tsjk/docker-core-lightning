@@ -377,6 +377,7 @@ There is template `docker-compose.yml` with some comments that aim to help
 with getting started.
 
 ## Future work (feel free to make pull requests)
+* Make it clear which logging entries come from RTL
 * Upgrade Core Lightning to the v24.02 series when the ecosystem has
   stabilized.
 * Make it easier to respond to changes to the port-forwarding address.
