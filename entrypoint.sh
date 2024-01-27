@@ -12,9 +12,10 @@
 : "${OFFLINE:=false}"
 
 declare -g -i DO_RUN=1
-declare -g -i SETUP_SIGNAL_HANDLER=1
-declare -g _SIGHUP_HANDLER_LOCK=$(mktemp -d -u)
-declare -g _SIGUSR1_HANDLER_LOCK=$(mktemp -d -u)
+declare -g -i SETUP_SIGNAL_HANDLERS=1
+declare -g _SIGHUP_HANDLER_LOCK=$(mktemp -d)
+declare -g _SIGTERM_HANDLER_LOCK=$(mktemp -d)
+declare -g _SIGUSR1_HANDLER_LOCK=$(mktemp -d)
 
 __info() {
   if [[ "${1}" == "-q" ]]; then
@@ -260,12 +261,32 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
       set -m
 
-      if [[ ${SETUP_SIGNAL_HANDLER} -eq 1 ]]; then
-        SETUP_SIGNAL_HANDLER=0
+      if [[ ${SETUP_SIGNAL_HANDLERS} -eq 1 ]]; then
+        SETUP_SIGNAL_HANDLERS=0
+
+        __sigterm_handler() {
+          __info "SIGTERM received"
+          if mkdir "${_SIGTERM_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
+            if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
+              __warning "SIGTERM not handled; location of Core Lightning RPC socket is unknown."
+            elif ! which lightning-cli > /dev/null 2>&1; then
+              __warning "SIGTERM not handled; location of Core Lightning CLI is unknown."
+            elif [[ -z "$(jobs -p '%?core-lightning' 2> /dev/null)" ]]; then
+              __warning "SIGTERM not handled; Core Lightning seems not to be running."
+            else
+              DO_RUN=0; __info "Handling SIGTERM -- stopping Core Lightning."
+              lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
+            fi
+            rmdir "${_SIGTERM_HANDLER_LOCK}/lock"
+          else
+            __warning "An instance of SIGTERM handler is already running."
+          fi
+        }
+        trap '__sigterm_handler' SIGTERM
 
         __sighup_handler() {
-          __info "SIGHUP received" >&2
-          if mkdir "${_SIGHUP_HANDLER_LOCK}" > /dev/null 2>&1; then
+          __info "SIGHUP received"
+          if mkdir "${_SIGHUP_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
             if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
               __warning "SIGHUP not handled; location of Core Lightning RPC socket is unknown."
             elif ! which lightning-cli > /dev/null 2>&1; then
@@ -276,7 +297,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               DO_RUN=1; __info "Handling SIGHUP -- restarting Core Lightning..."
               lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
             fi
-            rmdir "${_SIGHUP_HANDLER_LOCK}"
+            rmdir "${_SIGHUP_HANDLER_LOCK}/lock"
           else
             __warning "An instance of SIGHUP handler is already running."
           fi
@@ -359,7 +380,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           if ! type __sigusr1_handler > /dev/null 2>&1; then
             __sigusr1_handler() {
               __info "SIGUSR1 received"
-              if mkdir "${_SIGUSR1_HANDLER_LOCK}" > /dev/null 2>&1; then
+              if mkdir "${_SIGUSR1_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
                 if [[ "${START_RTL}" == "true" ]]; then
                   __info "Handling SIGUSR1 -- restarting RTL..." >&2
                   if [[ ${RTL_PID} -gt 0 ]] && kill -0 ${RTL_PID} > /dev/null 2>&1 && [[ -n "$(pgrep -P ${RTL_PID})" ]]; then
@@ -380,7 +401,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
                 else
                   __warning "Handling SIGUSR1 -- RTL is disabled."
                 fi
-                rmdir "${_SIGUSR1_HANDLER_LOCK}"
+                rmdir "${_SIGUSR1_HANDLER_LOCK}/lock"
               else
                 __warning "An instance of SIGUSR1 handler is already running."
               fi
@@ -397,6 +418,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || { __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID}); RTL_PID=0; }
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || { kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID}); LIGHTNINGD_RPC_SOCAT_PID=0; }
+      [[ ${DO_RUN} -eq 1 ]] || rm -rf "${_SIGHUP_HANDLER_LOCK}" "${_SIGTERM_HANDLER_LOCK}" "${_SIGUSR1_HANDLER_LOCK}"
     else
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
     fi
