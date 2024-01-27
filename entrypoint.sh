@@ -432,7 +432,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       }
       [[ ${DO_RUN} -eq 1 ]] || {
         rm -rf "${_SIGHUP_HANDLER_LOCK}" "${_SIGTERM_HANDLER_LOCK}" "${_SIGUSR1_HANDLER_LOCK}"
-        __info "Core Lightning Container exiting."
+        __info "Core Lightning container exiting."
       }
     else
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
