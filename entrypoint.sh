@@ -168,7 +168,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
 
-  declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
+  declare -g -i IS_RESTART=0 LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
   while [[ ${DO_RUN} -ne 0 ]]; do
     DO_RUN=0; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
@@ -250,15 +250,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     [[ "${START_IN_BACKGROUND}" == "true" ]] || [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
 
     [[ -z "${LIGHTNINGD_NETWORK}" ]] || grep -q -E '^\s*network='"${LIGHTNINGD_NETWORK}"'\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}" || set -- "${@}" --network="${LIGHTNINGD_NETWORK}"
-
-    if [[ "${OFFLINE}" == "true" ]]; then
-      __warning "Will start Core Lightning in off-line mode."
-      set -- "${@}" --offline
-    fi
-
     [[ "${DEVELOPER}" != "true" ]] || grep -q -E '(^|\s)--developer(\s|$)' <<< "${*}" || set -- "${@}" --developer
     [[ "${CLBOSS}" != "true" ]] || ! grep -q -E '^\s*plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       grep -q -E '(^|\s)--allow-deprecated-apis=true(\s|$)' <<< "${*}" || set -- "${@}" --allow-deprecated-apis=true
+
+    if [[ "${OFFLINE}" == "true" ]]; then
+      __warning "Will start Core Lightning in off-line mode."
+      grep -q -E '(^|\s)--offline(\s|$)' <<< "${*}" || set -- "${@}" --offline
+    fi
 
     if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
       if [[ ${SETUP_SIGNAL_HANDLERS} -eq 1 ]]; then
@@ -305,7 +304,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         trap '__sighup_handler' SIGHUP
       fi
 
-      set -- "${LIGHTNINGD}" "${@}"; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
+      [[ ${IS_RESTART} -ne 0 ]] || set -- "${LIGHTNINGD}" "${@}"
+      su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 120)); declare -g LIGHTNINGD_RPC_SOCKET=""
       while true; do
         t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
@@ -430,10 +430,12 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __info "Sending Core Lightning Daemon socat RPC proxy a terminate signal."
         kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID} | head -n 1); LIGHTNINGD_RPC_SOCAT_PID=0
       }
-      [[ ${DO_RUN} -eq 1 ]] || {
+      if [[ ${DO_RUN} -ne 0 ]]; then
+        IS_RESTART=1; __info "Core Lightning restart initiated."
+      else
         rm -rf "${_SIGHUP_HANDLER_LOCK}" "${_SIGTERM_HANDLER_LOCK}" "${_SIGUSR1_HANDLER_LOCK}"
         __info "Core Lightning container exiting."
-      }
+      fi
     else
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
     fi
