@@ -1,0 +1,140 @@
+From efc7bd13dd38896fb16c5379ff9f40c0f34ef53c Mon Sep 17 00:00:00 2001
+From: Ken Sedgwick <ken@bonsai.com>
+Date: Sat, 20 Jul 2024 19:59:54 -0700
+Subject: [PATCH 1/3] docs: Added earnings_tracker diagram
+
+---
+ docs/earnings_tracker.md | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+ create mode 100644 docs/earnings_tracker.md
+
+diff --git a/docs/earnings_tracker.md b/docs/earnings_tracker.md
+new file mode 100644
+index 000000000..e44974cfa
+--- /dev/null
++++ b/docs/earnings_tracker.md
+@@ -0,0 +1,21 @@
++# CLBOSS Earnings Tracker
++
++```mermaid
++   %%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
++
++   flowchart TB
++
++   style EarningsTracker fill:#9fb,stroke:#333,stroke-width:4px
++   Initiator-->|DbResource|EarningsTracker
++   ForwardFeeMonitor-->|ForwardFee|EarningsTracker
++   EarningsRebalancer-->|RequestMoveFunds|EarningsTracker
++   FundsMover_Runner-->|ResponseMoveFunds|EarningsTracker
++   EarningsRebalancer-->|RequestEarningsInfo|EarningsTracker
++   InitialRebalancer-->|RequestEarningsInfo|EarningsTracker
++   JitRebalancer-->|RequestEarningsInfo|EarningsTracker
++   StatusCommand-->|SolicitStatus|EarningsTracker
++   EarningsTracker-->|ResponseEarningsInfo|EarningsRebalancer
++   EarningsTracker-->|ResponseEarningsInfo|InitialRebalancer
++   EarningsTracker-->|ResponseEarningsInfo|JitRebalancer
++   EarningsTracker-->|ProvideStatus|StatusCommand
++```
+
+From 6afbbba9a636af8239c124aa4f4ee6a56b9b358a Mon Sep 17 00:00:00 2001
+From: Ken Sedgwick <ken@bonsai.com>
+Date: Sun, 21 Jul 2024 12:47:00 -0700
+Subject: [PATCH 2/3] Restore ForwardFeeMonitor's ability to see forwarding
+ fees
+
+Fixes ([#222])
+
+Prior to ElementsProject/lightning@780f32d (`v23.05`) both `fee` and
+`fee_msat` were sent for compatibility.  The ForwardFeeMonitor was
+checking for the presence of the `fee` field before processing the
+record.  This needed to be updated to `fee_msat`.
+---
+ Boss/Mod/ForwardFeeMonitor.cpp        | 2 +-
+ tests/boss/test_forwardfeemonitor.cpp | 1 -
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/Boss/Mod/ForwardFeeMonitor.cpp b/Boss/Mod/ForwardFeeMonitor.cpp
+index 6b6df4333..ddc815711 100644
+--- a/Boss/Mod/ForwardFeeMonitor.cpp
++++ b/Boss/Mod/ForwardFeeMonitor.cpp
+@@ -29,7 +29,7 @@ void ForwardFeeMonitor::start() {
+ 		try {
+ 			auto payload = n.params["forward_event"];
+ 			if ( !payload.has("out_channel")
+-			  || !payload.has("fee")
++			  || !payload.has("fee_msat")
+ 			  || !payload.has("resolved_time")
+ 			  || !payload.has("received_time")
+ 			   )
+diff --git a/tests/boss/test_forwardfeemonitor.cpp b/tests/boss/test_forwardfeemonitor.cpp
+index fefa16526..85a3427cb 100644
+--- a/tests/boss/test_forwardfeemonitor.cpp
++++ b/tests/boss/test_forwardfeemonitor.cpp
+@@ -131,7 +131,6 @@ int main() {
+     "in_msat": "100001001msat",
+     "out_msatoshi": 100000000,
+     "out_msat": "100000000msat",
+-    "fee": 1001,
+     "fee_msat": "1001msat",
+     "status": "settled",
+     "received_time": 1560696342.368,
+
+From fc15ac1dfd34310ddd537e6f13cdd469c6d3eceb Mon Sep 17 00:00:00 2001
+From: Ken Sedgwick <ken@bonsai.com>
+Date: Mon, 22 Jul 2024 10:43:13 -0700
+Subject: [PATCH 3/3] Add totals to clboss-status offchain_earnings_tracker
+
+---
+ Boss/Mod/EarningsTracker.cpp | 31 +++++++++++++++++++++++++++----
+ 1 file changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/Boss/Mod/EarningsTracker.cpp b/Boss/Mod/EarningsTracker.cpp
+index 87a7148b5..a141e0094 100644
+--- a/Boss/Mod/EarningsTracker.cpp
++++ b/Boss/Mod/EarningsTracker.cpp
+@@ -235,18 +235,41 @@ class EarningsTracker::Impl {
+ 			     ;
+ 			)QRY").execute();
+ 
++			uint64_t total_in_earnings = 0;
++			uint64_t total_in_expenditures = 0;
++			uint64_t total_out_earnings = 0;
++			uint64_t total_out_expenditures = 0;
++
+ 			auto out = Json::Out();
+ 			auto obj = out.start_object();
+ 			for (auto& r : fetch) {
++				auto in_earnings = r.get<std::uint64_t>(1);
++				auto in_expenditures = r.get<std::uint64_t>(2);
++				auto out_earnings = r.get<std::uint64_t>(3);
++				auto out_expenditures = r.get<std::uint64_t>(4);
+ 				auto sub = obj.start_object(r.get<std::string>(0));
+ 				sub
+-					.field("in_earnings", r.get<std::uint64_t>(1))
+-					.field("in_expenditures", r.get<std::uint64_t>(2))
+-					.field("out_earnings", r.get<std::uint64_t>(3))
+-					.field("out_expenditures", r.get<std::uint64_t>(4))
++					.field("in_earnings", in_earnings)
++					.field("in_expenditures", in_expenditures)
++					.field("out_earnings", out_earnings)
++					.field("out_expenditures", out_expenditures)
+ 					;
+ 				sub.end_object();
++				total_in_earnings += in_earnings;
++				total_in_expenditures += in_expenditures;
++				total_out_earnings += out_earnings;
++				total_out_expenditures += out_expenditures;
+ 			}
++
++			auto sub = obj.start_object("total");
++			sub
++				.field("in_earnings", total_in_earnings)
++				.field("in_expenditures", total_in_expenditures)
++				.field("out_earnings", total_out_earnings)
++				.field("out_expenditures", total_out_expenditures)
++				;
++			sub.end_object();
++
+ 			obj.end_object();
+ 
+ 			tx.commit();

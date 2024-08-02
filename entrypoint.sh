@@ -138,9 +138,6 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       __error "Failed to disable CLBOSS."
   fi
 
-  { [[ "${CLBOSS}" != "true" ]] && ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; } || \
-    [[ "${DEVELOPER}" != "true" ]] || __error "CLBOSS and DEVELOPER mode are mutually exclusive."
-
   if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
     sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
@@ -171,7 +168,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v23.11.2-20240128"
+    __info "This is Core Lightning container v23.11.2-20240802"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
