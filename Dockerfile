@@ -45,7 +45,7 @@ RUN { case ${TARGETPLATFORM} in \
     && chmod +x /tini
 
 # install bitcoin binaries
-ARG BITCOIN_VERSION=25.1
+ARG BITCOIN_VERSION=25.2
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
          "linux/arm64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
