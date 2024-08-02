@@ -64,14 +64,14 @@ RUN { case ${TARGETPLATFORM} in \
     && rm ${BITCOIN_TARBALL} SHA256SUMS ${BITCOIN_TARBALL}.sha256sum
 
 # install litecoin binaries
-ENV LITECOIN_VERSION=0.21.2.2
+ENV LITECOIN_VERSION=0.21.3
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=d53d429d4a0e36670df3d6c5c4eadfca6aac3d4b447a23106cfd490cfc77e9f2  ;; \
+                          LITECOIN_SHA256=ea231c630e2a243cb01affd4c2b95a2be71560f80b64b9f4bceaa13d736aa7cb  ;; \
          "linux/arm64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-aarch64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=cd2fb921bdd4386380ea9b9cb949d37f17764eaac89b268751da5ac99e8003c1  ;; \
+                          LITECOIN_SHA256=e889ab7aaa514e1be7266ab335f82a7db1f5598ad514099a486023fe401808c7  ;; \
          "linux/arm32v7") LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-arm-linux-gnueabihf.tar.gz; \
-                          LITECOIN_SHA256=debd14da7796dcf9bb96ca0e2c7ca3bc6a4d5907b5b9e2950e66d0980a96610b  ;; \
+                          LITECOIN_SHA256=4ce97f1723cfa46a06f890309a0405ef9046a8c057d071506adf7937b8c77f43  ;; \
          *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
       esac; } \
     && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
