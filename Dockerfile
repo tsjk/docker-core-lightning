@@ -156,8 +156,7 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
 ENV RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
-RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
-    rustup toolchain install stable --component rustfmt --allow-downgrade
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=1.79 --component=rustfmt
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
     curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python${PYTHON_VERSION} - && \
