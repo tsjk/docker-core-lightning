@@ -159,7 +159,7 @@ ENV RUST_PROFILE=release \
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=1.79 --component=rustfmt
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
-    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | python${PYTHON_VERSION} - && \
+    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=1.7.1 python${PYTHON_VERSION} - && \
     { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; }
 
 RUN export PATH="/root/.local/bin:$PATH" && \
@@ -169,6 +169,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
     pip3 wheel cryptography && \
     pip3 install --prefix=/usr grpcio-tools && \
     poetry env use system && \
+    poetry lock --no-update && \
     poetry install && \
     ./configure --prefix=/usr/local \
       --disable-address-sanitizer \
@@ -309,6 +310,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
     pip3 install --prefix=/usr grpcio-tools && \
     pip3 install --prefix=/usr -r /tmp/lightning/requirements.txt && rm -rf /tmp/lightning && \
+    pip3 cache purge && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
