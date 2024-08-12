@@ -168,7 +168,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v23.11.2-20240802"
+    __info "This is Core Lightning container v23.11.2-20240812"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
@@ -431,6 +431,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID} | head -n 1); LIGHTNINGD_RPC_SOCAT_PID=0
       }
       if [[ ${DO_RUN} -ne 0 ]]; then
+        sleep 5
         __info "Core Lightning restart initiated."
       else
         rm -rf "${_SIGHUP_HANDLER_LOCK}" "${_SIGTERM_HANDLER_LOCK}" "${_SIGUSR1_HANDLER_LOCK}"
