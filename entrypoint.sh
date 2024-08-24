@@ -168,7 +168,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v23.11.2-20240812"
+    __info "This is Core Lightning container v24.02.2-20240827"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then

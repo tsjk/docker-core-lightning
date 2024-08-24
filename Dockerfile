@@ -87,8 +87,8 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v23.11.2 \
-    CLBOSS_GIT_HASH=159ef70278100ab6fda4e625259f2a52b791979a
+    LIGHTNINGD_VERSION=v24.02.2 \
+    CLBOSS_GIT_HASH=5aa184eb01704ace56eb40c175e7867526340f31
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -166,6 +166,12 @@ RUN export PATH="/root/.local/bin:$PATH" && \
     cd /tmp && \
     git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
     cd /tmp/lightning && \
+    wget -q --timeout=60 --waitretry=0 --tries=8 -O pr-7330.patch "https://patch-diff.githubusercontent.com/raw/ElementsProject/lightning/pull/7330.patch" && \
+    wget -q --timeout=60 --waitretry=0 --tries=8 -O pr-7368.patch "https://patch-diff.githubusercontent.com/raw/ElementsProject/lightning/pull/7368.patch" && \
+    patch -p1 < pr-7330.patch && rm -f pr-7330.patch && \
+    patch -p1 < pr-7368.patch && rm -f pr-7368.patch && \
+    sed -i '/^#include "config.h"$/a #include <bitcoin/short_channel_id.h>' gossipd/gossmap_manage.c && \
+    sed -i -E 's/(fmt_short_channel_id\(\S+,\s*)([^& ])/\1\&\2/; s/(\s)fmt_short_channel_id\(/\1short_channel_id_to_str\(/g' common/gossmap.c gossipd/gossmap_manage.c && \
     pip3 wheel cryptography && \
     pip3 install --prefix=/usr grpcio-tools && \
     poetry env use system && \
@@ -243,7 +249,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v23.11.2 \
+ARG LIGHTNINGD_VERSION=v24.02.2 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
