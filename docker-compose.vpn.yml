@@ -19,6 +19,23 @@ services:
     environment:
       ALWAYS_USE_PROXY: "false"
       CLBOSS: "true"
+#     Settings for GOSSIP_STORE_WATCHER.
+#     Syntax:
+#       [Check time (s)]:...
+#       [Size limit (B)]:...
+#       [Restart on limit (true/false)]:...
+#       [Disable restart when file exists (path)]:...
+#       [Directory to watch gossip_store in (path)]
+#     Empty value implies default setting.
+#     Default:
+#       3600:3758096384:false::${NETWORK_DATA_DIRECTORY}
+#     Meaning, check every hour whether gossip_store in
+#     ${NETWORK_DATA_DIRECTORY} exceeds 3758096384B, and print warning if it
+#     does (i.e. do not restart Core Lightning). Since path to file that
+#     signals disabling of restarts is empty, the file is not checked for (and
+#     since restarts are disabled as default the file would have no effect).
+#     Check time of zero disables GOSSIP_STORE_WATCHER completely.
+      GOSSIP_STORE_WATCHER: "::::"
       NETWORK_RPCD: "host.docker.internal:8332"
       # Set NETWORK_RPCD_AUTH_SET to "true" after NETWORK_RPCD_USER and
       # NETWORK_RPCD_PASSWORD have been updated to their correct settings.
