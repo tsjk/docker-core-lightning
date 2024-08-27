@@ -278,6 +278,7 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 COPY ./entrypoint.sh /entrypoint.sh
+COPY ./gossip-store-watcher.sh /usr/local/bin/gossip-store-watcher.sh
 COPY --from=builder /tmp/lightning/ /tmp/lightning/
 COPY --from=node-builder /tmp/RTL_install/ /
 

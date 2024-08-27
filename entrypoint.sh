@@ -7,6 +7,7 @@ set -m
 : "${CLBOSS:=true}"
 : "${NETWORK_RPCD_AUTH_SET:=false}"
 : "${PORT_FORWARDING:=false}"
+: "${GOSSIP_STORE_WATCHER:=::::}"
 : "${START_RTL:=true}"
 : "${START_IN_BACKGROUND:=false}"
 : "${EXPOSE_TCP_RPC:=false}"
@@ -18,6 +19,8 @@ declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK=$(mktemp -d)
 declare -g _SIGTERM_HANDLER_LOCK=$(mktemp -d)
 declare -g _SIGUSR1_HANDLER_LOCK=$(mktemp -d)
+declare -g -a GOSSIP_STORE_WATCHER_O=( '--check-interval-in-seconds' '--size-limit-in-bytes' '--restart-on-limit' '--disable-restart-when-file-exists' )
+declare -g -a GOSSIP_STORE_WATCHER_ARGS
 
 __info() {
   if [[ "${1}" == "-q" ]]; then
@@ -91,6 +94,35 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fi
     done
   fi
+
+  ! grep -q -F '<backspace>' <<< "${GOSSIP_STORE_WATCHER}" || __error "Invalid setting of GOSSIP_STORE_WATCHER (contains \"<backspace>\"): \"${GOSSIP_STORE_WATCHER}\"."
+  readarray -t GOSSIP_STORE_WATCHER_SETTINGS <(echo -n "${GOSSIP_STORE_WATCHER}:" | sed -E 's/\\\\/<backspace>/g' | perl -0nE 'say for split /(?<!\\):/' | perl -0pe 's/(?<!\\)\\:/:/g; s/<backspace>/\\/')
+  if [[ ${#GOSSIP_STORE_WATCHER_SETTINGS[@]} -eq 0 ]]; then
+    GOSSIP_STORE_WATCHER_ARGS=("${NETWORK_DATA_DIRECTORY}")
+  elif [[ ${#GOSSIP_STORE_WATCHER_SETTINGS[@]} -le 5 ]]; then
+    declare -i a_i=0
+    for a in "${GOSSIP_STORE_WATCHER_SETTINGS[@]}"; do
+      if [[ ${a_i} -eq 0 ]]; then
+        if [[ -n "${a}" && "${a}" == "0" ]]; then
+          GOSSIP_STORE_WATCHER_ARGS=(); break
+        else
+          GOSSIP_STORE_WATCHER_ARGS=("--entrypoint-script-pid" "${$}")
+          GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}" "${a}")
+        fi
+      elif [[ ${a_i} -gt 0 && -n "${a}" ]]; then
+        [[ ${a_i} -eq 4 ]] || GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}")
+        GOSSIP_STORE_WATCHER_ARGS+=("${a}")
+      elif [[ ${a_i} -eq 4 && -z "${a}" ]]; then
+        GOSSIP_STORE_WATCHER_ARGS+=("${NETWORK_DATA_DIRECTORY}")
+      fi
+      a_i+=1
+    done
+  else
+    __error "Invalid setting of GOSSIP_STORE_WATCHER: \"${GOSSIP_STORE_WATCHER}\"."
+  fi
+  [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 ]] || \
+    GOSSIP_STORE_WATCHER_VALIDATE_ARGS=1 /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" || \
+    __error "Validation of arguments for gossip store watcher failed [${GOSSIP_STORE_WATCHER_ARGS[*]}]."
 
   if [[ -d "${LIGHTNINGD_DATA}/.pre-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
     for f in "${LIGHTNINGD_DATA}/.pre-start.d"/*.sh; do
@@ -246,7 +278,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       START_RTL="false"
     fi
 
-    [[ "${START_IN_BACKGROUND}" == "true" ]] || [[ "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
+    [[ "${START_IN_BACKGROUND}" == "true" ]] || \
+      [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 && "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
 
     [[ -z "${LIGHTNINGD_NETWORK}" ]] || grep -q -E '^\s*network='"${LIGHTNINGD_NETWORK}"'\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}" || \
       grep -q -E '(^|\s)--network='"${LIGHTNINGD_NETWORK}"'(\s|$)' <<< "${*}" || set -- "${@}" "--network=${LIGHTNINGD_NETWORK}"
@@ -303,6 +336,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         }
         trap '__sighup_handler' SIGHUP
       fi
+
+      [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 ]] || /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" &
 
       set -- "${LIGHTNINGD}" "${@}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
@@ -421,7 +456,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __warning "Core Lightning Daemon is still running after normal run mode exited!"
          [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]] || ! which lightning-cli > /dev/null 2>&1 || lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
       fi
-      ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1 && __info "Core Lightning exited."
+      ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1 && { LIGHTNINGD_REAL_PID=0; __info "Core Lightning exited."; }
 
       [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
         __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID} | head -n 1); RTL_PID=0
