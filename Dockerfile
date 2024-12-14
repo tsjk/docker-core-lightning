@@ -190,9 +190,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
     poetry export -o ./requirements.txt --without-hashes --with dev
 
 # CLBOSS
-COPY ./clboss-patches/ /tmp/clboss-patches/
-RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
-    apt-get install -qq -y --no-install-recommends \
+RUN apt-get install -qq -y --no-install-recommends \
         libev-dev \
         libcurl4-gnutls-dev \
         libsqlite3-dev \
@@ -203,7 +201,6 @@ RUN [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -gt 0 ] && \
     git init && git remote add origin https://github.com/ZmnSCPxj/clboss && \
     git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
     git checkout FETCH_HEAD && \
-    ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ) && \
     echo && autoreconf -f -i && \
     ./configure --prefix=/usr/local && \
     make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
