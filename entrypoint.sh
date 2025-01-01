@@ -96,7 +96,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   fi
 
   ! grep -q -F '<backspace>' <<< "${GOSSIP_STORE_WATCHER}" || __error "Invalid setting of GOSSIP_STORE_WATCHER (contains \"<backspace>\"): \"${GOSSIP_STORE_WATCHER}\"."
-  readarray -t GOSSIP_STORE_WATCHER_SETTINGS <(echo -n "${GOSSIP_STORE_WATCHER}:" | sed -E 's/\\\\/<backspace>/g' | perl -0nE 'say for split /(?<!\\):/' | perl -0pe 's/(?<!\\)\\:/:/g; s/<backspace>/\\/')
+  readarray -t GOSSIP_STORE_WATCHER_SETTINGS < <(echo -n "${GOSSIP_STORE_WATCHER}:" | sed -E 's/\\\\/<backspace>/g' | perl -0nE 'say for split /(?<!\\):/' | perl -0pe 's/(?<!\\)\\:/:/g; s/<backspace>/\\/')
   if [[ ${#GOSSIP_STORE_WATCHER_SETTINGS[@]} -eq 0 ]]; then
     GOSSIP_STORE_WATCHER_ARGS=("${NETWORK_DATA_DIRECTORY}")
   elif [[ ${#GOSSIP_STORE_WATCHER_SETTINGS[@]} -le 5 ]]; then
@@ -107,7 +107,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           GOSSIP_STORE_WATCHER_ARGS=(); break
         else
           GOSSIP_STORE_WATCHER_ARGS=("--entrypoint-script-pid" "${$}")
-          GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}" "${a}")
+          [[ -z "${a}" ]] || GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}" "${a}")
         fi
       elif [[ ${a_i} -gt 0 && -n "${a}" ]]; then
         [[ ${a_i} -eq 4 ]] || GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}")
@@ -197,10 +197,10 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
 
-  declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 RTL_PID=0
+  declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v24.02.2-20240827"
+    __info "This is Core Lightning container v24.11.1-20250101"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
@@ -337,7 +337,10 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         trap '__sighup_handler' SIGHUP
       fi
 
-      [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 ]] || /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" &
+      [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 ]] || {
+        /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" &
+        GOSSIP_STORE_WATCHER_PID=${!}
+      }
 
       set -- "${LIGHTNINGD}" "${@}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
@@ -461,6 +464,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
         __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID} | head -n 1); RTL_PID=0
+      }
+      [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
+        __info "Sending Gossip Store Watcher a terminate signal."; kill ${GOSSIP_STORE_WATCHER_PID}; GOSSIP_STORE_WATCHER_PID=0
       }
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || {
         __info "Sending Core Lightning Daemon socat RPC proxy a terminate signal."
