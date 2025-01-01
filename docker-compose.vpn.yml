@@ -35,7 +35,8 @@ services:
 #     signals disabling of restarts is empty, the file is not checked for (and
 #     since restarts are disabled as default the file would have no effect).
 #     Check time of zero disables GOSSIP_STORE_WATCHER completely.
-      GOSSIP_STORE_WATCHER: "::::"
+#     This is only needed for Core Lightning versions 24.02.* - 24.08.*
+      GOSSIP_STORE_WATCHER: "0::::"
       NETWORK_RPCD: "host.docker.internal:8332"
       # Set NETWORK_RPCD_AUTH_SET to "true" after NETWORK_RPCD_USER and
       # NETWORK_RPCD_PASSWORD have been updated to their correct settings.

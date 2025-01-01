@@ -13,15 +13,15 @@ ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
-    echo 'Etc/UTC' > /etc/timezone && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
-    apt-get update -qq && \
-    apt-get install -qq -y locales && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
-    dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
-    apt-get dist-upgrade -qq -y --no-install-recommends
+      echo 'Etc/UTC' > /etc/timezone && \
+      dpkg-reconfigure --frontend noninteractive tzdata && \
+      apt-get update -qq && \
+      apt-get install -qq -y locales && \
+      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+      echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+      dpkg-reconfigure -f noninteractive locales && \
+      update-locale LANG=en_US.UTF-8 && \
+      apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -64,14 +64,14 @@ RUN { case ${TARGETPLATFORM} in \
     && rm ${BITCOIN_TARBALL} SHA256SUMS ${BITCOIN_TARBALL}.sha256sum
 
 # install litecoin binaries
-ENV LITECOIN_VERSION=0.21.3
+ENV LITECOIN_VERSION=0.21.4
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=ea231c630e2a243cb01affd4c2b95a2be71560f80b64b9f4bceaa13d736aa7cb  ;; \
+                          LITECOIN_SHA256=857fc41091f2bae65c3bf0fd4d388fca915fc93a03f16dd2578ac3cc92898390  ;; \
          "linux/arm64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-aarch64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=e889ab7aaa514e1be7266ab335f82a7db1f5598ad514099a486023fe401808c7  ;; \
+                          LITECOIN_SHA256=517e3a9069e658eb92de98c934c61836589ee2410d99464a768a5698985926c9  ;; \
          "linux/arm32v7") LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-arm-linux-gnueabihf.tar.gz; \
-                          LITECOIN_SHA256=4ce97f1723cfa46a06f890309a0405ef9046a8c057d071506adf7937b8c77f43  ;; \
+                          LITECOIN_SHA256=84fd40aff5f6ed745518c736e379900d6bf4e1197d7329e57c39e21c0f36137d  ;; \
          *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
       esac; } \
     && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
@@ -87,30 +87,31 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.02.2 \
-    CLBOSS_GIT_HASH=5aa184eb01704ace56eb40c175e7867526340f31
+    LIGHTNINGD_VERSION=v24.11.1 \
+    CLBOSS_GIT_HASH=b6795c43dc646225902845c81c4a4df3fea532e7
 
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
-    echo 'Etc/UTC' > /etc/timezone && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
-    apt-get update -qq && \
-    apt-get install -qq -y locales && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
-    dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
-    apt-get dist-upgrade -qq -y --no-install-recommends
+      echo 'Etc/UTC' > /etc/timezone && \
+      dpkg-reconfigure --frontend noninteractive tzdata && \
+      apt-get update -qq && \
+      apt-get install -qq -y locales && \
+      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+      echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+      dpkg-reconfigure -f noninteractive locales && \
+      update-locale LANG=en_US.UTF-8 && \
+      apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 ENV PYTHON_VERSION=3 \
-    PYTHON_VERSION_FULL=3.11
-ENV PYTHONPATH=/usr/lib/python${PYTHON_VERSION_FULL}/site-packages \
-    PIP_ROOT_USER_ACTION=ignore
+    PYTHON_VERSION_FULL=3.11 \
+    PIP_ROOT_USER_ACTION=ignore \
+    POETRY_VERSION=1.8.5 \
+    RUST_VERSION=1.82
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -122,6 +123,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         gettext \
         git \
         gnupg \
+        jq \
         libc-dev\
         libev-dev \
         libevent-dev \
@@ -135,77 +137,133 @@ RUN apt-get install -qq -y --no-install-recommends \
         protobuf-compiler \
         python${PYTHON_VERSION_FULL} \
         python${PYTHON_VERSION}-dev \
-        python${PYTHON_VERSION}-mako \
         python${PYTHON_VERSION}-pip \
-        python${PYTHON_VERSION}-setuptools \
-        python${PYTHON_VERSION}-venv \
-        python${PYTHON_VERSION}-wheel \
         qemu-user-static \
-        wget\
+        unzip \
+        wget \
+        tclsh \
         zlib1g \
-        zlib1g-dev
+        zlib1g-dev && \
+        update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
+        { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
+        pip3 install --upgrade pip setuptools wheel
 
+# su-exec
 RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
-    wget -q --timeout=60 --waitretry=0 --tries=8 -O su-exec.c "https://raw.githubusercontent.com/ncopa/su-exec/master/su-exec.c" && \
-    mkdir -p /tmp/su-exec_install/usr/local/bin && \
-    SUEXEC_BINARY="/tmp/su-exec_install/usr/local/bin/su-exec" && \
-    gcc -Wall su-exec.c -o"${SUEXEC_BINARY}" && \
-    chown root:root "${SUEXEC_BINARY}" && \
-    chmod 0755 "${SUEXEC_BINARY}"
+      wget -q --timeout=60 --waitretry=0 --tries=8 -O su-exec.c "https://raw.githubusercontent.com/ncopa/su-exec/master/su-exec.c" && \
+      mkdir -p /tmp/su-exec_install/usr/local/bin && \
+      SUEXEC_BINARY="/tmp/su-exec_install/usr/local/bin/su-exec" && \
+      gcc -Wall su-exec.c -o"${SUEXEC_BINARY}" && \
+      chown root:root "${SUEXEC_BINARY}" && \
+      chmod 0755 "${SUEXEC_BINARY}"
+
+# rust
+ENV RUST_PROFILE=release \
+    CARGO_OPTS=--profile=release \
+    PATH=$PATH:/root/.cargo/bin
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt
+
+# poetry
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSION} python${PYTHON_VERSION} -
+
+RUN export PATH="/root/.local/bin:$PATH" && \
+      poetry self add poetry-plugin-export && \
+      cd /tmp && \
+      git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
+      cd /tmp/lightning && \
+      poetry export -o requirements.txt --without-hashes --with dev && \
+      pip3 install -r requirements.txt && pip3 cache purge && \
+      poetry lock --no-update && \
+      poetry install && \
+      git reset --hard HEAD && \
+      ./configure --prefix=/usr/local \
+        --disable-address-sanitizer \
+        --disable-compat \
+        --disable-fuzzing \
+        --disable-ub-sanitize \
+        --disable-valgrind \
+        --enable-rust \
+        --enable-static && \
+      make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
+      poetry run make DESTDIR=/tmp/lightning_install install && \
+      poetry export -o requirements.txt --without-hashes --with dev && \
+      ( cd plugins/clnrest && poetry export -o requirements.txt --without-hashes ) && \
+      ( cd plugins/wss-proxy && poetry export -o requirements.txt --without-hashes )
+
+# CLBOSS
+RUN apt-get install -qq -y --no-install-recommends \
+        autoconf-archive \
+        dnsutils \
+        libcurl4-gnutls-dev \
+        libev-dev \
+        libsqlite3-dev \
+        libunwind-dev && \
+      cd /tmp && \
+      mkdir clboss && cd clboss && \
+      git init && git remote add origin https://github.com/ZmnSCPxj/clboss && \
+      git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
+      git checkout FETCH_HEAD && \
+      echo && autoreconf -f -i && \
+      ./configure --prefix=/usr/local && \
+      make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
+      make DESTDIR=/tmp/clboss_install install
+
+
+# - python-builder -
+FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as python-builder
+
+ARG MAKE_NPROC=0 \
+    LIGHTNINGD_VERSION=v24.11.1
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
+      echo 'Etc/UTC' > /etc/timezone && \
+      dpkg-reconfigure --frontend noninteractive tzdata && \
+      apt-get update -qq && \
+      apt-get install -qq -y locales && \
+      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+      echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+      dpkg-reconfigure -f noninteractive locales && \
+      update-locale LANG=en_US.UTF-8 && \
+      apt-get dist-upgrade -qq -y --no-install-recommends
+
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+ENV PYTHON_VERSION=3 \
+    PYTHON_VERSION_FULL=3.11 \
+    PIP_ROOT_USER_ACTION=ignore \
+    RUST_VERSION=1.82
+
+RUN apt-get install -qq -y --no-install-recommends \
+        autoconf \
+        automake \
+        build-essential \
+        curl \
+        git \
+        libtool \
+        libffi-dev \
+        libssl-dev \
+        pkg-config \
+        python${PYTHON_VERSION_FULL} \
+        python${PYTHON_VERSION}-dev \
+        python${PYTHON_VERSION}-pip
 
 ENV RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
-RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=1.79 --component=rustfmt
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
-    curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=1.7.1 python${PYTHON_VERSION} - && \
-    { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; }
+COPY --from=builder /tmp/lightning /tmp/lightning/
 
-RUN export PATH="/root/.local/bin:$PATH" && \
-    cd /tmp && \
-    git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
-    cd /tmp/lightning && \
-    wget -q --timeout=60 --waitretry=0 --tries=8 -O pr-7330.patch "https://patch-diff.githubusercontent.com/raw/ElementsProject/lightning/pull/7330.patch" && \
-    wget -q --timeout=60 --waitretry=0 --tries=8 -O pr-7368.patch "https://patch-diff.githubusercontent.com/raw/ElementsProject/lightning/pull/7368.patch" && \
-    patch -p1 < pr-7330.patch && rm -f pr-7330.patch && \
-    patch -p1 < pr-7368.patch && rm -f pr-7368.patch && \
-    sed -i '/^#include "config.h"$/a #include <bitcoin/short_channel_id.h>' gossipd/gossmap_manage.c && \
-    sed -i -E 's/(fmt_short_channel_id\(\S+,\s*)([^& ])/\1\&\2/; s/(\s)fmt_short_channel_id\(/\1short_channel_id_to_str\(/g' common/gossmap.c gossipd/gossmap_manage.c && \
-    pip3 wheel cryptography && \
-    pip3 install --prefix=/usr grpcio-tools && \
-    poetry env use system && \
-    poetry lock --no-update && \
-    poetry install && \
-    ./configure --prefix=/usr/local \
-      --disable-address-sanitizer \
-      --disable-compat \
-      --disable-fuzzing \
-      --disable-ub-sanitize \
-      --disable-valgrind \
-      --enable-rust \
-      --enable-static && \
-    make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-    poetry run make DESTDIR=/tmp/lightning_install install && \
-    poetry export -o ./requirements.txt --without-hashes --with dev
-
-# CLBOSS
-RUN apt-get install -qq -y --no-install-recommends \
-        libev-dev \
-        libcurl4-gnutls-dev \
-        libsqlite3-dev \
-        dnsutils \
-        autoconf-archive && \
-    cd /tmp && \
-    mkdir clboss && cd clboss && \
-    git init && git remote add origin https://github.com/ZmnSCPxj/clboss && \
-    git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
-    git checkout FETCH_HEAD && \
-    echo && autoreconf -f -i && \
-    ./configure --prefix=/usr/local && \
-    make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-    make DESTDIR=/tmp/clboss_install install
-
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt && \
+      { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
+      pip3 install --upgrade pip setuptools wheel && \
+      ( cd /tmp/lightning && pip3 install -r requirements.txt ) && \
+      ( cd /tmp/lightning/plugins/clnrest && pip3 install -r requirements.txt ) && \
+      ( cd /tmp/lightning/plugins/wss-proxy && pip3 install -r requirements.txt ) && \
+      pip3 cache purge
 
 # - node builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
@@ -213,15 +271,15 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as nod
 ARG RTL_VERSION=0.15.4
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
-    echo 'Etc/UTC' > /etc/timezone && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
-    apt-get update -qq && \
-    apt-get install -qq -y locales && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
-    dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
-    apt-get dist-upgrade -qq -y --no-install-recommends
+      echo 'Etc/UTC' > /etc/timezone && \
+      dpkg-reconfigure --frontend noninteractive tzdata && \
+      apt-get update -qq && \
+      apt-get install -qq -y locales && \
+      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+      echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+      dpkg-reconfigure -f noninteractive locales && \
+      update-locale LANG=en_US.UTF-8 && \
+      apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -246,7 +304,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v24.02.2 \
+ARG LIGHTNINGD_VERSION=v24.11.1 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
@@ -260,15 +318,15 @@ ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
     NETWORK_RPCD=""
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
-    echo 'Etc/UTC' > /etc/timezone && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
-    apt-get update -qq && \
-    apt-get install -qq -y locales && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
-    dpkg-reconfigure -f noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
-    apt-get dist-upgrade -qq -y --no-install-recommends
+      echo 'Etc/UTC' > /etc/timezone && \
+      dpkg-reconfigure --frontend noninteractive tzdata && \
+      apt-get update -qq && \
+      apt-get install -qq -y locales && \
+      sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+      echo 'LANG="en_US.UTF-8"' > /etc/default/locale && \
+      dpkg-reconfigure -f noninteractive locales && \
+      update-locale LANG=en_US.UTF-8 && \
+      apt-get dist-upgrade -qq -y --no-install-recommends
 
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
@@ -280,8 +338,7 @@ COPY --from=builder /tmp/lightning/ /tmp/lightning/
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
-    PYTHON_VERSION_FULL=3.11
-ENV PYTHONPATH=/usr/lib/python${PYTHON_VERSION_FULL}/site-packages \
+    PYTHON_VERSION_FULL=3.11 \
     PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
@@ -309,12 +366,8 @@ RUN apt-get install -qq -y --no-install-recommends \
         libsqlite3-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
+    { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
     update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
-    { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || \
-        rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
-    pip3 install --prefix=/usr grpcio-tools && \
-    pip3 install --prefix=/usr -r /tmp/lightning/requirements.txt && rm -rf /tmp/lightning && \
-    pip3 cache purge && \
     chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
@@ -340,6 +393,7 @@ RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
 COPY --from=builder /tmp/clboss_install/ /
+COPY --from=python-builder /usr/local/lib/python${PYTHON_VERSION_FULL}/dist-packages/ /usr/local/lib/python${PYTHON_VERSION_FULL}/dist-packages/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY --from=downloader "/tini" /usr/bin/tini
