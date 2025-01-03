@@ -465,7 +465,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
         __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID} | head -n 1); RTL_PID=0
       }
-      [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
+      [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] || ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
         __info "Sending Gossip Store Watcher a terminate signal."; kill ${GOSSIP_STORE_WATCHER_PID}; GOSSIP_STORE_WATCHER_PID=0
       }
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || {
