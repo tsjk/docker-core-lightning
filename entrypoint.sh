@@ -226,10 +226,24 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     __info "This is Core Lightning container v24.11.1-20250103"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
+    ### update of port forwarding address ###
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
       if type get_forwarding_address 2> /dev/null | head -n 1 | grep -q -E '^get_forwarding_address is a function$'; then
         PORT_FORWARDING_ADDRESS__OLD="${PORT_FORWARDING_ADDRESS}"
-        PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
+        PORT_FORWARDING_ADDRESS=''
+        declare -i i=0 l=5 d=60
+        while [[ -z "${PORT_FORWARDING_ADDRESS}" && ${i} -lt ${l} ]]; do
+          PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
+          echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
+            i+=1
+            [[ ${i} -ge ${l} ]] || {
+              __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" - retrying in ${d} seconds..."
+              sleep ${d}
+            }
+            PORT_FORWARDING_ADDRESS=''
+          }
+        done
+        unset d l i
         if ! echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$'; then
           __warning "Function for getting port forwarding address returned an invalid address - reusing previous valid address \"${PORT_FORWARDING_ADDRESS__OLD}\"."
           PORT_FORWARDING_ADDRESS="${PORT_FORWARDING_ADDRESS__OLD}"
@@ -246,6 +260,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       sed -i -E '/#\s*<VPN-ANNOUNCE-ADDR>/{n;s/^(announce-addr=.*)/\#\1/}' "${LIGHTNINGD_CONFIG_FILE}"
     fi
 
+    ### update of clnrest port ###
     if [[ -n "${CLNREST_PORT}" && "${CLNREST_PORT}" =~ ^[1-9][0-9]*$ && ${CLNREST_PORT} -gt 0 && ${CLNREST_PORT} -lt 65535 ]]; then
       sed -i -E 's/(^\s*#)?clnrest-port=.*/clnrest-port='"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update clnrest-port in \"${LIGHTNINGD_CONFIG_FILE}\"."
@@ -277,6 +292,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       START_RTL="false"
     fi
 
+    ### update of rtl configuration ###
     RTL_CONFIG_FILE="${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json"
     if [[ "${START_RTL}" == "true" && -s "${RTL_CONFIG_FILE}" ]]; then
       if grep -q -E '<RTL-PASSWORD>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
@@ -301,21 +317,27 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       START_RTL="false"
     fi
 
+    ### check of starting in backgrund is wanted or needed ###
     [[ "${START_IN_BACKGROUND}" == "true" ]] || \
       [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 && "${EXPOSE_TCP_RPC}" != "true" && "${START_CL_REST}" != "true" ]] || START_IN_BACKGROUND="true"
 
+    ### setting of network parameter ###
     [[ -z "${LIGHTNINGD_NETWORK}" ]] || grep -q -E '^\s*network='"${LIGHTNINGD_NETWORK}"'\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}" || \
       grep -q -E '(^|\s)--network='"${LIGHTNINGD_NETWORK}"'(\s|$)' <<< "${*}" || set -- "${@}" "--network=${LIGHTNINGD_NETWORK}"
+    ### setting of developer parameter ###
     [[ "${DEVELOPER}" != "true" ]] || grep -q -E '(^|\s)--developer(\s|$)' <<< "${*}" || set -- "${@}" --developer
+    ### setting of allow-deprecated-apis parameter ###
     [[ "${CLBOSS}" != "true" ]] || ! grep -q -E '^\s*plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       grep -q -E '(^|\s)--allow-deprecated-apis=true(\s|$)' <<< "${*}" || set -- "${@}" --allow-deprecated-apis=true
-
-    if [[ "${OFFLINE}" == "true" ]]; then
+    ### setting of offline parameter ###
+    [[ "${OFFLINE}" != "true" ]] || {
       __warning "Will start Core Lightning in off-line mode."
       grep -q -E '(^|\s)--offline(\s|$)' <<< "${*}" || set -- "${@}" --offline
-    fi
+    }
 
+    ### starting in background... ###
     if [[ "${START_IN_BACKGROUND}" == "true" ]]; then
+      ### setup of signal handlers ###
       if [[ ${SETUP_SIGNAL_HANDLERS} -eq 1 ]]; then
         SETUP_SIGNAL_HANDLERS=0
 
@@ -360,11 +382,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         trap '__sighup_handler' SIGHUP
       fi
 
+      ### start of gossip store watcher ###
       [[ ${#GOSSIP_STORE_WATCHER_ARGS[@]} -eq 0 ]] || {
         /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" &
         GOSSIP_STORE_WATCHER_PID=${!}
       }
 
+      ### start of core lightning ###
       set -- "${LIGHTNINGD}" "${@}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 900)); declare -g LIGHTNINGD_RPC_SOCKET=""
@@ -379,6 +403,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       LIGHTNINGD_REAL_PID=$(pgrep -P ${LIGHTNINGD_PID} | head -n 1)
       __info "Core Lightning started (PID: ${LIGHTNINGD_REAL_PID})"
 
+      ### running of post-start scripts ###
       if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
         for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
           __info -q "--- Executing \"${f}\":"
@@ -387,6 +412,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         done
       fi
 
+      ### setup of socat proxy for rpc interface ###
       if [[ "${EXPOSE_TCP_RPC}" == "true" && -n "${LIGHTNINGD_RPC_SOCKET}" ]]; then
         __info "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
         su -s /bin/sh -w "${SU_WHITELIST_ENV}" \
@@ -394,6 +420,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         LIGHTNINGD_RPC_SOCAT_PID=${!}
       fi
 
+      ### start of rtl ###
       if [[ "${START_RTL}" == "true" ]]; then
         __wait_for_rpc_liveness() {
           [[ -n "${LIGHTNINGD_RPC_SOCKET}" ]] || { __warning "Failed to communicate through the Core Lightning RPC socket (LIGHTNINGD_RPC_SOCKET is unset!)"; return 1; }
@@ -476,6 +503,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         fi
       fi
 
+      ### normal mode ###
       __info "Entering normal run mode (PIDs: ${LIGHTNINGD_PID} <- ${LIGHTNINGD_REAL_PID})."
       while kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
       __info "Exited normal run mode."
@@ -485,15 +513,18 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       fi
       ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1 && { LIGHTNINGD_REAL_PID=0; __info "Core Lightning exited."; }
 
+      ### clean-up of rtl ###
       [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
         __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID} | head -n 1); RTL_PID=0
       }
-      [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] || ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
-        __info "Sending Gossip Store Watcher a terminate signal."; kill ${GOSSIP_STORE_WATCHER_PID}; GOSSIP_STORE_WATCHER_PID=0
-      }
+      ### clean-up socat proxy for rpc interface ###
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || {
         __info "Sending Core Lightning Daemon socat RPC proxy a terminate signal."
         kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID} | head -n 1); LIGHTNINGD_RPC_SOCAT_PID=0
+      }
+      ### clean-up of gossip store watcher ###
+      [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] || ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
+        __info "Sending Gossip Store Watcher a terminate signal."; kill ${GOSSIP_STORE_WATCHER_PID}; GOSSIP_STORE_WATCHER_PID=0
       }
       if [[ ${DO_RUN} -ne 0 ]]; then
         sleep 5
@@ -503,6 +534,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __info "Core Lightning container exiting."
       fi
     else
+      ### starting in foreground ###
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
     fi
   done
