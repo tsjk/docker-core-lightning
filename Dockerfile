@@ -363,7 +363,8 @@ RUN apt-get install -qq -y --no-install-recommends \
         dnsutils \
         libev-dev \
         libcurl4-gnutls-dev \
-        libsqlite3-dev && \
+        libsqlite3-dev \
+        libunwind-dev && \
     apt-get auto-clean && \
     rm -rf /var/lib/apt/lists/* && \
     { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
