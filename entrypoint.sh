@@ -72,16 +72,19 @@ fi
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   shift 1
 
+  ### setting of uid and gid ###
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then
     # shellcheck disable=SC2015,SC2086
     { [[ $(getent group lightning | cut -d ':' -f 3) -eq ${PGID} ]] || groupmod --non-unique --gid ${PGID} lightning; } && \
       { [[ $(getent passwd lightning | cut -d ':' -f 3) -eq ${PUID} ]] || usermod --non-unique --uid ${PUID} lightning; } || \
       __error "Failed to change uid or gid or \"lightning\" user."; fi
+  ### chown of home directory ###
   [[ "${DO_CHOWN}" != "true" ]] || { \
     # shellcheck disable=SC2015
     [[ -n "${LIGHTNINGD_HOME}" && -d "${LIGHTNINGD_HOME}" ]] && chown -R lightning:lightning "${LIGHTNINGD_HOME}" || \
       __error "Failed to do chown on \"${LIGHTNINGD_HOME}\"."; }
 
+  ### sourcing of environment variables ###
   if [[ -d "${LIGHTNINGD_DATA}/.env.d" && $(find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | wc -l) -gt 0 ]]; then
     find "${LIGHTNINGD_DATA}/.env.d" -mindepth 1 -maxdepth 1 -type f | sort | while read -r; do
       if [[ -s "${REPLY}" ]]; then
@@ -95,6 +98,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     done
   fi
 
+  ### gossip store watcher setup ###
   ! grep -q -F '<backspace>' <<< "${GOSSIP_STORE_WATCHER}" || __error "Invalid setting of GOSSIP_STORE_WATCHER (contains \"<backspace>\"): \"${GOSSIP_STORE_WATCHER}\"."
   readarray -t GOSSIP_STORE_WATCHER_SETTINGS < <(echo -n "${GOSSIP_STORE_WATCHER}:" | sed -E 's/\\\\/<backspace>/g' | perl -0nE 'say for split /(?<!\\):/' | perl -0pe 's/(?<!\\)\\:/:/g; s/<backspace>/\\/')
   if [[ ${#GOSSIP_STORE_WATCHER_SETTINGS[@]} -eq 0 ]]; then
@@ -124,6 +128,35 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     GOSSIP_STORE_WATCHER_VALIDATE_ARGS=1 /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" || \
     __error "Validation of arguments for gossip store watcher failed [${GOSSIP_STORE_WATCHER_ARGS[*]}]."
 
+  ### getting of forwarding address ###
+  if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
+    if [[ "${PORT_FORWARDING_ADDRESS}" == "PROTONWIRE" ]]; then
+      get_forwarding_address() { curl -s 'http://protonwire:1009' | awk -F ':' '($1 == "TCP") { printf("%s:%s", $2, $3); }'; }
+    elif [[ "${PORT_FORWARDING_ADDRESS:0:2}" == "()" ]]; then
+      eval "get_forwarding_address${PORT_FORWARDING_ADDRESS}"
+    elif ! echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$'; then
+      __error "PORT_FORWARDING_ADDRESS is set to an unsupported value."
+    fi
+    if type get_forwarding_address 2> /dev/null | head -n 1 | grep -q -E '^get_forwarding_address is a function$'; then
+      PORT_FORWARDING_ADDRESS=''
+      declare -i i=0 l=5 d=60
+      while [[ -z "${PORT_FORWARDING_ADDRESS}" && ${i} -lt ${l} ]]; do
+        PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
+        echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
+          i+=1
+          [[ ${i} -ge ${l} ]] || {
+            __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" - retrying in ${d} seconds..."
+            sleep ${d}
+          }
+          PORT_FORWARDING_ADDRESS=''
+        }
+      done
+      [[ -n "${PORT_FORWARDING_ADDRESS}" ]] || __error "Function for getting port forwarding address does not work."
+      unset d l i
+    fi
+  fi
+
+  ### execution of pre-start scripts ###
   if [[ -d "${LIGHTNINGD_DATA}/.pre-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
     for f in "${LIGHTNINGD_DATA}/.pre-start.d"/*.sh; do
       if [[ -x "${f}" ]]; then
@@ -136,6 +169,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     done
   fi
 
+  ### validation of post-start scripts ###
   if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
     START_IN_BACKGROUND="true"
     for f in "${LIGHTNINGD_DATA}/.post-start.d"/*.sh; do
@@ -145,21 +179,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     done
   fi
 
-  if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
-    if [[ "${PORT_FORWARDING_ADDRESS}" == "PROTONWIRE" ]]; then
-      get_forwarding_address() { curl -s 'http://protonwire:1009' | awk -F ':' '($1 == "TCP") { printf("%s:%s", $2, $3); }'; }
-    elif [[ "${PORT_FORWARDING_ADDRESS:0:2}" == "()" ]]; then
-      eval "get_forwarding_address${PORT_FORWARDING_ADDRESS}"
-    elif ! echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$'; then
-      __error "PORT_FORWARDING_ADDRESS is set to an unsupported value."
-    fi
-    if type get_forwarding_address 2> /dev/null | head -n 1 | grep -q -E '^get_forwarding_address is a function$'; then
-      PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
-      echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || \
-        __error "Function for getting port forwarding address does not work."
-    fi
-  fi
-
+  ### toggling of clboss ###
   if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
            -Ee 's@^\s*#(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
@@ -170,11 +190,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       __error "Failed to disable CLBOSS."
   fi
 
+  ### update of tor-service-password ###
   if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
     sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
 
+  ### setup of socat proxies ###
   # shellcheck disable=SC2046
   [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 $(cat /tmp/socat-network_rpc.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-network_rpc.lock /tmp/socat-network_rpc.pid
@@ -197,10 +219,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
 
+  ### main run loop ###
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v24.11.1-20250101"
+    __info "This is Core Lightning container v24.11.1-20250103"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
