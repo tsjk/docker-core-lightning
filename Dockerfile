@@ -358,6 +358,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         wget \
         zlib1g && \
     apt-get install -qq -y --no-install-recommends    `# 'CLBOSS dependencies'` \
+        binutils \
         dnsutils \
         libev-dev \
         libcurl4-gnutls-dev \
