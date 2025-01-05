@@ -209,7 +209,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
   ### update of tor-service-password ###
   if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
-    sed -i 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+    sed -i -E 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
 
