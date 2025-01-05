@@ -410,12 +410,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       ### start of core lightning ###
       set -- "${LIGHTNINGD}" "${@}"
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
-      LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -i T=$(( $(date '+%s') + 900)); declare -g LIGHTNINGD_RPC_SOCKET=""
+      LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -g LIGHTNINGD_RPC_SOCKET=""; declare -i T=$(( $(date '+%s') + 900))
       while true; do
         t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
         i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
         kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core Lightning."
         if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
+        elif [[ -S "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
         [[ $(date '+%s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
         [[ $(( (((T + 1 - $(date '+%s')) / 10) + 1) % 6 )) -ne 0 ]] || __info "Waiting for Core Lightning RPC socket, will wait $(( T - $(date '+%s') )) seconds more..."
       done
