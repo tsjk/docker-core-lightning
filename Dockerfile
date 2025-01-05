@@ -332,8 +332,6 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-COPY ./entrypoint.sh /entrypoint.sh
-COPY ./gossip-store-watcher.sh /usr/local/bin/gossip-store-watcher.sh
 COPY --from=builder /tmp/lightning/ /tmp/lightning/
 COPY --from=node-builder /tmp/RTL_install/ /
 
@@ -369,7 +367,6 @@ RUN apt-get install -qq -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/* && \
     { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
     update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION_FULL} 1 && \
-    chmod 0755 /entrypoint.sh && \
     userdel -r node > /dev/null 2>&1 && \
     useradd --no-log-init --user-group \
       --create-home --home-dir ${LIGHTNINGD_HOME} \
@@ -388,8 +385,12 @@ RUN apt-get install -qq -y --no-install-recommends \
     chown -R -h lightning:lightning "${LIGHTNINGD_DATA}" && \
     rm -rf /tmp/*
 
+COPY ./entrypoint.sh /entrypoint.sh
+COPY ./gossip-store-watcher.sh /usr/local/bin/gossip-store-watcher.sh
 COPY ./RTL-Config.json ${LIGHTNINGD_HOME}/.config/RTL/RTL-Config.json
-RUN chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
+RUN chmod 0755 /entrypoint.sh && \
+      chmod 0755 /usr/local/bin/gossip-store-watcher.sh && \
+      chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 
 COPY --from=builder /tmp/su-exec_install/ /
 COPY --from=builder /tmp/lightning_install/ /
