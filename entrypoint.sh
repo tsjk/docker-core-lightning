@@ -42,19 +42,13 @@ else
   LIGHTNINGD="/usr/local/bin/lightningd"
 fi
 
-! grep -q -E '(^|\s)--network=\S+(\s|$)' <<< "${*}" || export LIGHTNINGD_NETWORK=$(grep -Po '(?<=--network\=)\S+(?=(\s|$))' <<< "${*}" | tail -n 1)
-
-if [[ -n "${LIGHTNINGD_NETWORK}" ]] && grep -q -E '^\s*network=\S+\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}"; then
-  sed -i -E 's@^\s*network=\S+(\s*#.*)@network='"${LIGHTNINGD_NETWORK}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
-    __error "Failed to update network in \"${LIGHTNINGD_CONFIG_FILE}\"."
-fi
-__info "Using Lightning network \"${LIGHTNINGD_NETWORK}\"."
-NETWORK_DATA_DIRECTORY="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
-
 if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
+  [[ -z "${*}" ]] || ! grep -q -E '(^|\s)--network=\S+(\s|$)' <<< "${*}" || \
+    export LIGHTNINGD_NETWORK=$(grep -Po '(?<=--network\=)\S+(?=(\s|$))' <<< "${*}" | tail -n 1)
+
   for a; do [[ "${a}" =~ ^--conf=.*$ ]] && LIGHTNINGD_CONFIG_FILE="${a##--conf=}"; done
   if [[ -n "${LIGHTNINGD_CONFIG_FILE}" ]]; then
     set -- "${LIGHTNINGD}" "${@:2}"
@@ -64,6 +58,15 @@ if [[ "${1}" == "lightningd" ]]; then
   fi
   [[ -s "${LIGHTNINGD_CONFIG_FILE}" ]] || \
     __error "Refusing to start; \"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized."
+
+  if [[ -n "${LIGHTNINGD_NETWORK}" ]] && grep -q -E '^\s*network=\S+\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i -E 's@^\s*network=\S+(\s*#.*)@network='"${LIGHTNINGD_NETWORK}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update network in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  fi
+  __info "Using Lightning network \"${LIGHTNINGD_NETWORK}\"."
+  NETWORK_DATA_DIRECTORY="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
+  [[ -d "${NETWORK_DATA_DIRECTORY}" ]] || mkdir -p "${NETWORK_DATA_DIRECTORY}" || \
+    __error "Unable to create directory for network data \"${NETWORK_DATA_DIRECTORY}\"."
 
   [[ "${NETWORK_RPCD_AUTH_SET}" != "false" ]] || \
     __error "Refusing to start; NETWORK_RPCD_AUTH_SET is set to \"false\"."
@@ -75,7 +78,6 @@ if [[ "${1}" == "lightningd" ]]; then
       __error "Failed to update bitcoin-rpcpassword in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
 fi
-
 
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   shift 1
