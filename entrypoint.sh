@@ -416,8 +416,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
         kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core Lightning."
         if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
-        [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
-        [[ $(( (((T + 1 - $(date '+s')) / 10) + 1) % 6 )) -ne 0 ]] || __info "Waiting for Core Lightning RPC socket, will wait $(( T - $(date '+s') )) seconds more..."
+        [[ $(date '+%s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
+        [[ $(( (((T + 1 - $(date '+%s')) / 10) + 1) % 6 )) -ne 0 ]] || __info "Waiting for Core Lightning RPC socket, will wait $(( T - $(date '+%s') )) seconds more..."
       done
       LIGHTNINGD_REAL_PID=$(pgrep -P ${LIGHTNINGD_PID} | head -n 1)
       __info "Core Lightning started (PID: ${LIGHTNINGD_REAL_PID})"
