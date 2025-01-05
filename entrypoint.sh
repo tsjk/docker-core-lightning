@@ -482,12 +482,12 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
                 __warning "More than one rune exists, and it has not been specified which to use for RTL."
               fi
             elif [[ "${RTL_RUNE}" =~ ^[0-9][0-9]*$ ]]; then
-              __info "Looking up rune \#${RTL_RUNE} for RTL..."
+              __info "Looking up rune for RTL (\#${RTL_RUNE})..."
               RTL_RUNE=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r --arg rune_id "${RTL_RUNE}" '.runes[] | select(.unique_id == $rune_id) | .rune')
               # shellcheck disable=SC2015
               [[ -n "${RTL_RUNE}" ]] && __info " rune found." || __warning " FAILED to find specified rune!"
             else
-              __info "Validating specified rune..."
+              __info "Validating specified rune for RTL..."
               [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}") | jq -r '.runes[].rune' | head -n 1)" == "${RTL_RUNE}" ]] || RTL_RUNE='null'
               # shellcheck disable=SC2015
               [[ "${RTL_RUNE}" != "null" ]] && __info " rune is valid." || __warning " FAILED to validate specified rune!"
@@ -502,12 +502,20 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
             sed -i 's@<RTL-RUNE-PATH>@'"${RTL_RUNE_PATH}"'@' "${RTL_CONFIG_FILE}" || \
            { __warning "Failed to set rune for RTL. Will hence not start RTL."; START_RTL="false"; }
         fi
-        if [[ "${START_RTL}" == "true" ]]; then
-          RTL_RUNE_PATH=$(jq -r '.nodes[].authentication.runePath' "${RTL_CONFIG_FILE}" | head -n 1)
-          [[ -s "${RTL_RUNE_PATH}" ]] && \
-            LIGHTNING_RUNE=$(grep -Po '(?<=^LIGHTNING_RUNE=")[^"]*(?=")' "${RTL_RUNE_PATH}") || \
-            LIGHTNING_RUNE=""
-          [[ -n "${LIGHTNING_RUNE}" ]] || { __warning "Rune for RTL not set. Will hence not start RTL."; START_RTL="false"; }
+        if [[ "${START_RTL}" == "true" && -z "${RTL_RUNE}" ]]; then
+          if __wait_for_rpc_liveness; then
+            __info "Validating rune for RTL..."
+            RTL_RUNE_PATH=$(jq -r '.nodes[].authentication.runePath' "${RTL_CONFIG_FILE}" | head -n 1)
+            [[ -s "${RTL_RUNE_PATH}" ]] && \
+              LIGHTNING_RUNE=$(grep -Po '(?<=^LIGHTNING_RUNE=")[^"]*(?=")' "${RTL_RUNE_PATH}") || \
+              LIGHTNING_RUNE=""
+            # shellcheck disable=SC2015
+            [[ -n "${LIGHTNING_RUNE}" ]] && \
+              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}") | jq -r '.runes[].rune' | head -n 1)" == "${LIGHTNING_RUNE}" ]] && \
+              __info " Rune valid." || { __warning "Rune for RTL not set. Will hence not start RTL."; START_RTL="false"; }
+          else
+            __warning "Could not validate rune for RTL because RPC socket failed to come live."
+          fi
         fi
         if [[ "${START_RTL}" == "true" ]]; then
           __info "Starting RTL."
