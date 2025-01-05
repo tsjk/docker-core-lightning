@@ -154,7 +154,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         }
       done
       [[ -n "${PORT_FORWARDING_ADDRESS}" ]] && \
-        __info "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\"." || \
+        __info "get_forwarding_address() returned address \"${PORT_FORWARDING_ADDRESS}\"." || \
         __error "Function for getting port forwarding address does not work."
       unset d i l
       PORT_FORWARDING_ADDRESS__OLD="."
@@ -253,7 +253,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           __warning "Function for getting port forwarding address returned an invalid address - reusing previous valid address \"${PORT_FORWARDING_ADDRESS__OLD}\"."
           PORT_FORWARDING_ADDRESS="${PORT_FORWARDING_ADDRESS__OLD}"
         else
-          __info "get_forwarding_address() returned address \"${PORT_FORWARDING_ADDRESS}\"."
+          __info "get_forwarding_address() address \"${PORT_FORWARDING_ADDRESS}\"."
         fi
       elif [[ "${PORT_FORWARDING_ADDRESS__OLD}" == "." ]]; then
         PORT_FORWARDING_ADDRESS__OLD=""
