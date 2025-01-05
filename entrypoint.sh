@@ -46,6 +46,7 @@ if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
+  # shellcheck disable=SC2155
   [[ -z "${*}" ]] || ! grep -q -E '(^|\s)--network=\S+(\s|$)' <<< "${*}" || \
     export LIGHTNINGD_NETWORK=$(grep -Po '(?<=--network\=)\S+(?=(\s|$))' <<< "${*}" | tail -n 1)
 
@@ -163,6 +164,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           PORT_FORWARDING_ADDRESS=''
         }
       done
+      # shellcheck disable=SC2015
       [[ -n "${PORT_FORWARDING_ADDRESS}" ]] && \
         __info "get_forwarding_address() returned address \"${PORT_FORWARDING_ADDRESS}\"." || \
         __error "Function for getting port forwarding address does not work."
@@ -289,6 +291,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Failed to update clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E 's/^\s*(disable-plugin=clnrest\.py)\s*$/\#\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      # shellcheck disable=SC2015
       grep -q -E '^\s*clnrest-port=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
         grep -q -E '^\s*clnrest-protocol=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
         grep -q -E '^\s*clnrest-host=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
@@ -303,6 +306,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Failed to comment clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E 's/^\s*#(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to uncomment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
+      # shellcheck disable=SC2015
       ! grep -q -E '^\s*clnrest-port=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
         ! grep -q -E '^\s*clnrest-protocol=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
         ! grep -q -E '^\s*clnrest-host=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
@@ -409,13 +413,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       ### start of core lightning ###
       set -- "${LIGHTNINGD}" "${@}"
+      # shellcheck disable=SC2046
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
       LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -g LIGHTNINGD_RPC_SOCKET=""; declare -i T=$(( $(date '+%s') + 900))
       while true; do
         t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
         i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
         kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core Lightning."
-        if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
+        if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break
         elif [[ -S "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
         [[ $(date '+%s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
         [[ $(( (((T + 1 - $(date '+%s')) / 10) + 1) % 6 )) -ne 0 ]] || __info "Waiting for Core Lightning RPC socket, will wait $(( T - $(date '+%s') )) seconds more..."
@@ -435,6 +440,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       ### setup of socat proxy for rpc interface ###
       if [[ "${EXPOSE_TCP_RPC}" == "true" && -n "${LIGHTNINGD_RPC_SOCKET}" ]]; then
         __info "RPC available on IPv4 TCP port ${LIGHTNINGD_RPC_PORT}"
+        # shellcheck disable=SC2046
         su -s /bin/sh -w "${SU_WHITELIST_ENV}" \
            -c "exec /usr/bin/socat TCP4-LISTEN:${LIGHTNINGD_RPC_PORT},fork,reuseaddr UNIX-CONNECT:${NETWORK_DATA_DIRECTORY}/lightning-rpc" - lightning $(: cln-rpc-socat) &
         LIGHTNINGD_RPC_SOCAT_PID=${!}
@@ -486,15 +492,16 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         if [[ "${START_RTL}" == "true" ]]; then
           __info "Starting RTL."
           su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
-          RTL_PID=${!}; while kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -z "$(pgrep -P ${RTL_PID})" ]]; do sleep 1; done
-          [[ -n "$(pgrep -P ${RTL_PID})" ]] && __info "RTL started (PID: $(pgrep -P ${RTL_PID} | head -n 1))."
+          RTL_PID=${!}; while kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -z "$(pgrep -P "${RTL_PID}")" ]]; do sleep 1; done
+          [[ -n "$(pgrep -P "${RTL_PID}")" ]] && __info "RTL started (PID: $(pgrep -P ${RTL_PID} | head -n 1))."
           if ! type __sigusr1_handler > /dev/null 2>&1; then
             __sigusr1_handler() {
               __info "SIGUSR1 received"
               if mkdir "${_SIGUSR1_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
                 if [[ "${START_RTL}" == "true" ]]; then
                   __info "Handling SIGUSR1 -- restarting RTL..." >&2
-                  if [[ "${RTL_PID}" -gt 0 ]] && kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -n "$(pgrep -P ${RTL_PID})" ]]; then
+                  if [[ "${RTL_PID}" -gt 0 ]] && kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -n "$(pgrep -P "${RTL_PID}")" ]]; then
+                    # shellcheck disable=SC2155
                     local __rtl_pid=$(pgrep -P "${RTL_PID}" | head -n 1)
                     __info "Handling SIGUSR1 -- sending interrupt signal to existing RTL instance (PID: ${__rtl_pid})..."; kill -INT "${__rtl_pid}"
                     local T=$(( $(date '+%s') + 60)) t=0
@@ -535,12 +542,12 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
       ### clean-up of rtl ###
       [[ "${RTL_PID}" -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
-        __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P "${RTL_PID}" | head -n 1); RTL_PID=0
+        __info "Sending RTL an interrupt signal."; kill -INT "$(pgrep -P "${RTL_PID}" | head -n 1)"; RTL_PID=0
       }
       ### clean-up socat proxy for rpc interface ###
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || {
         __info "Sending Core Lightning Daemon socat RPC proxy a terminate signal."
-        kill $(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID} | head -n 1); LIGHTNINGD_RPC_SOCAT_PID=0
+        kill "$(pgrep -P "${LIGHTNINGD_RPC_SOCAT_PID}" | head -n 1)"; LIGHTNINGD_RPC_SOCAT_PID=0
       }
       ### clean-up of gossip store watcher ###
       [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] || ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
