@@ -108,7 +108,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     for a in "${GOSSIP_STORE_WATCHER_SETTINGS[@]}"; do
       if [[ ${a_i} -eq 0 ]]; then
         if [[ -n "${a}" && "${a}" == "0" ]]; then
-          GOSSIP_STORE_WATCHER_ARGS=(); break
+          GOSSIP_STORE_WATCHER_ARGS=()
+          __info "Gossip Store Watcher disabled."
+          break
         else
           GOSSIP_STORE_WATCHER_ARGS=("--entrypoint-script-pid" "${$}")
           [[ -z "${a}" ]] || GOSSIP_STORE_WATCHER_ARGS+=("${GOSSIP_STORE_WATCHER_O[${a_i}]}" "${a}")
@@ -144,15 +146,18 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
         echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
           i+=1
-          [[ ${i} -ge ${l} ]] || {
-            __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" - retrying in ${d} seconds..."
+          [[ ${i} -gt ${l} ]] || {
+            __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" (try ${i} of $${d}) - retrying in ${d} seconds..."
             sleep ${d}
           }
           PORT_FORWARDING_ADDRESS=''
         }
       done
-      [[ -n "${PORT_FORWARDING_ADDRESS}" ]] || __error "Function for getting port forwarding address does not work."
-      unset d l i
+      [[ -n "${PORT_FORWARDING_ADDRESS}" ]] && \
+        __info "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\"." || \
+        __error "Function for getting port forwarding address does not work."
+      unset d i l
+      PORT_FORWARDING_ADDRESS__OLD="."
     fi
   fi
 
@@ -228,7 +233,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
 
     ### update of port forwarding address ###
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
-      if type get_forwarding_address 2> /dev/null | head -n 1 | grep -q -E '^get_forwarding_address is a function$'; then
+      if [[ "${PORT_FORWARDING_ADDRESS__OLD}" != "." ]] && type get_forwarding_address 2> /dev/null | head -n 1 | grep -q -E '^get_forwarding_address is a function$'; then
         PORT_FORWARDING_ADDRESS__OLD="${PORT_FORWARDING_ADDRESS}"
         PORT_FORWARDING_ADDRESS=''
         declare -i i=0 l=5 d=60
@@ -236,18 +241,22 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
           echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
             i+=1
-            [[ ${i} -ge ${l} ]] || {
-              __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" - retrying in ${d} seconds..."
+            [[ ${i} -gt ${l} ]] || {
+              __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" (try ${i} of $${d}) - retrying in ${d} seconds..."
               sleep ${d}
             }
             PORT_FORWARDING_ADDRESS=''
           }
         done
-        unset d l i
+        unset d i l
         if ! echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$'; then
           __warning "Function for getting port forwarding address returned an invalid address - reusing previous valid address \"${PORT_FORWARDING_ADDRESS__OLD}\"."
           PORT_FORWARDING_ADDRESS="${PORT_FORWARDING_ADDRESS__OLD}"
+        else
+          __info "get_forwarding_address() returned address \"${PORT_FORWARDING_ADDRESS}\"."
         fi
+      elif [[ "${PORT_FORWARDING_ADDRESS__OLD}" == "." ]]; then
+        PORT_FORWARDING_ADDRESS__OLD=""
       fi
       PORT_FORWARDING__HOST="${PORT_FORWARDING_ADDRESS%%:*}"; PORT_FORWARDING__PORT="${PORT_FORWARDING_ADDRESS##*:}"
       __info "Port forwarding host is \"${PORT_FORWARDING__HOST}\""; __info "Port forwarding port is \"${PORT_FORWARDING__PORT}\""
@@ -348,7 +357,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               __warning "SIGTERM not handled; location of Core Lightning RPC socket is unknown."
             elif ! which lightning-cli > /dev/null 2>&1; then
               __warning "SIGTERM not handled; location of Core Lightning CLI is unknown."
-            elif [[ ${LIGHTNINGD_REAL_PID} -lt 1 ]] || ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1; then
+            elif [[ "${LIGHTNINGD_REAL_PID}" -lt 1 ]] || ! kill -0 "${LIGHTNINGD_REAL_PID}" > /dev/null 2>&1; then
               __warning "SIGTERM not handled; Core Lightning seems not to be running."
             else
               DO_RUN=0; __info "Handling SIGTERM -- stopping Core Lightning."
@@ -368,7 +377,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               __warning "SIGHUP not handled; location of Core Lightning RPC socket is unknown."
             elif ! which lightning-cli > /dev/null 2>&1; then
               __warning "SIGHUP not handled; location of Core Lightning CLI is unknown."
-            elif [[ ${LIGHTNINGD_REAL_PID} -lt 1 ]] || ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1; then
+            elif [[ "${LIGHTNINGD_REAL_PID}" -lt 1 ]] || ! kill -0 "${LIGHTNINGD_REAL_PID}" > /dev/null 2>&1; then
               __warning "SIGHUP not handled; Core Lightning seems not to be running."
             else
               DO_RUN=1; __info "Handling SIGHUP -- restarting Core Lightning..."
@@ -466,7 +475,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         if [[ "${START_RTL}" == "true" ]]; then
           __info "Starting RTL."
           su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
-          RTL_PID=${!}; while kill -0 ${RTL_PID} > /dev/null 2>&1 && [[ -z "$(pgrep -P ${RTL_PID})" ]]; do sleep 1; done
+          RTL_PID=${!}; while kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -z "$(pgrep -P ${RTL_PID})" ]]; do sleep 1; done
           [[ -n "$(pgrep -P ${RTL_PID})" ]] && __info "RTL started (PID: $(pgrep -P ${RTL_PID} | head -n 1))."
           if ! type __sigusr1_handler > /dev/null 2>&1; then
             __sigusr1_handler() {
@@ -474,11 +483,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               if mkdir "${_SIGUSR1_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
                 if [[ "${START_RTL}" == "true" ]]; then
                   __info "Handling SIGUSR1 -- restarting RTL..." >&2
-                  if [[ ${RTL_PID} -gt 0 ]] && kill -0 ${RTL_PID} > /dev/null 2>&1 && [[ -n "$(pgrep -P ${RTL_PID})" ]]; then
-                    local __rtl_pid=$(pgrep -P ${RTL_PID} | head -n 1)
-                    __info "Handling SIGUSR1 -- sending interrupt signal to existing RTL instance (PID: ${__rtl_pid})..."; kill -INT ${__rtl_pid}
+                  if [[ "${RTL_PID}" -gt 0 ]] && kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -n "$(pgrep -P ${RTL_PID})" ]]; then
+                    local __rtl_pid=$(pgrep -P "${RTL_PID}" | head -n 1)
+                    __info "Handling SIGUSR1 -- sending interrupt signal to existing RTL instance (PID: ${__rtl_pid})..."; kill -INT "${__rtl_pid}"
                     local T=$(( $(date '+%s') + 60)) t=0
-                    while kill -0 ${RTL_PID} > /dev/null 2>&1; do
+                    while kill -0 "${RTL_PID}" > /dev/null 2>&1; do
                       t=$(( T - $(date '+s') )); [[ ${t} -lt 2 ]] || t=2
                       [[ $(date '+s') -lt ${T} ]] || { __warning "Failed to stop running RTL instance!"; return; }
                       sleep 2
@@ -488,7 +497,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
                     __warning "Handling SIGUSR1 -- no existing RTL instance found."
                   fi
                   RTL_PID=0; su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c 'cd /usr/local/RTL && exec node rtl' - lightning &
-                  RTL_PID=${!}; while kill -0 ${RTL_PID} > /dev/null 2>&1 && [[ -z "$(pgrep -P ${RTL_PID})" ]]; do sleep 1; done
+                  RTL_PID=${!}; while kill -0 "${RTL_PID}" > /dev/null 2>&1 && [[ -z "$(pgrep -P ${RTL_PID})" ]]; do sleep 1; done
                   [[ -n "$(pgrep -P ${RTL_PID})" ]] && __info "Handling SIGUSR1 -- RTL started (PID: $(pgrep -P ${RTL_PID} | head -n 1))." >&2
                 else
                   __warning "Handling SIGUSR1 -- RTL is disabled."
@@ -507,15 +516,15 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       __info "Entering normal run mode (PIDs: ${LIGHTNINGD_PID} <- ${LIGHTNINGD_REAL_PID})."
       while kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
       __info "Exited normal run mode."
-      if kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1; then
+      if kill -0 "${LIGHTNINGD_REAL_PID}" > /dev/null 2>&1; then
         __warning "Core Lightning Daemon is still running after normal run mode exited!"
          [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]] || ! which lightning-cli > /dev/null 2>&1 || lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
       fi
-      ! kill -0 ${LIGHTNINGD_REAL_PID} > /dev/null 2>&1 && { LIGHTNINGD_REAL_PID=0; __info "Core Lightning exited."; }
+      ! kill -0 "${LIGHTNINGD_REAL_PID}" > /dev/null 2>&1 && { LIGHTNINGD_REAL_PID=0; __info "Core Lightning exited."; }
 
       ### clean-up of rtl ###
-      [[ ${RTL_PID} -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
-        __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P ${RTL_PID} | head -n 1); RTL_PID=0
+      [[ "${RTL_PID}" -eq 0 || -z "$(pgrep -P ${RTL_PID})" ]] || {
+        __info "Sending RTL an interrupt signal."; kill -INT $(pgrep -P "${RTL_PID}" | head -n 1); RTL_PID=0
       }
       ### clean-up socat proxy for rpc interface ###
       [[ ${LIGHTNINGD_RPC_SOCAT_PID} -eq 0 || -z "$(pgrep -P ${LIGHTNINGD_RPC_SOCAT_PID})" ]] || {
@@ -536,6 +545,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     else
       ### starting in foreground ###
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
+      DO_RUN=0
     fi
   done
 else
