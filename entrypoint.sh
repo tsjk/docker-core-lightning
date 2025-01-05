@@ -16,9 +16,9 @@ set -m
 
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
-declare -g _SIGHUP_HANDLER_LOCK=$(mktemp -d)
-declare -g _SIGTERM_HANDLER_LOCK=$(mktemp -d)
-declare -g _SIGUSR1_HANDLER_LOCK=$(mktemp -d)
+declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
+declare -g _SIGTERM_HANDLER_LOCK; _SIGTERM_HANDLER_LOCK=$(mktemp -d)
+declare -g _SIGUSR1_HANDLER_LOCK; _SIGUSR1_HANDLER_LOCK=$(mktemp -d)
 declare -g -a GOSSIP_STORE_WATCHER_O=( '--check-interval-in-seconds' '--size-limit-in-bytes' '--restart-on-limit' '--disable-restart-when-file-exists' )
 declare -g -a GOSSIP_STORE_WATCHER_ARGS
 
@@ -41,6 +41,14 @@ if [[ -x "/usr/bin/lightningd" ]]; then
 else
   LIGHTNINGD="/usr/local/bin/lightningd"
 fi
+
+! grep -q -E '(^|\s)--network=\S+(\s|$)' <<< "${*}" || export LIGHTNINGD_NETWORK=$(grep -Po '(?<=--network\=)\S+(?=(\s|$))' <<< "${*}" | tail -n 1)
+
+if [[ -n "${LIGHTNINGD_NETWORK}" ]] && grep -q -E '^\s*network=\S+\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}"; then
+  sed -i -E 's@^\s*network=\S+(\s*#.*)@network='"${LIGHTNINGD_NETWORK}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+    __error "Failed to update network in \"${LIGHTNINGD_CONFIG_FILE}\"."
+fi
+__info "Using Lightning network \"${LIGHTNINGD_NETWORK}\"."
 NETWORK_DATA_DIRECTORY="${LIGHTNINGD_DATA}/${LIGHTNINGD_NETWORK}"
 
 if [[ $(echo "$1" | cut -c1) == "-" ]]; then
@@ -446,7 +454,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         if grep -q -E '<RTL-RUNE-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null; then
           if __wait_for_rpc_liveness; then
             if [[ -z "${RTL_RUNE}" ]]; then
-              declare -i RUNE_COUNT=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length')
+              declare -i RUNE_COUNT; RUNE_COUNT=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length')
               if [[ ${RUNE_COUNT} -eq 0 ]]; then
                 lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" createrune > /dev/null 2>&1
                 if [[ $(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length') -eq 1 ]]; then
