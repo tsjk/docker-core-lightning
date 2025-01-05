@@ -546,6 +546,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       [[ ${GOSSIP_STORE_WATCHER_PID} -eq 0 ]] || ! kill -0 ${GOSSIP_STORE_WATCHER_PID} > /dev/null 2>&1 || {
         __info "Sending Gossip Store Watcher a terminate signal."; kill ${GOSSIP_STORE_WATCHER_PID}; GOSSIP_STORE_WATCHER_PID=0
       }
+      ### clean-up of rpc socket ###
+      [[ ! -e "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]] || rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
+
       if [[ ${DO_RUN} -ne 0 ]]; then
         sleep 5
         __info "Core Lightning restart initiated."
@@ -556,6 +559,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     else
       ### starting in foreground ###
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
+      ### clean-up of rpc socket ###
+      [[ ! -e "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]] || rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
       DO_RUN=0
     fi
   done
