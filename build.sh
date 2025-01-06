@@ -10,6 +10,11 @@ if [ "${1}" == "--prepare-qemu" -o "${1}" == "--prepare-qemu-only" ]; then
         [ -n "${q_dirname}" ] && \
           ( for f in /proc/sys/fs/binfmt_misc/qemu-*; do [[ ! -e "${f}" ]] || echo '-1' | sudo tee "${f}" > /dev/null || exit 1; done ) && \
           sudo "${d}/qemu-binfmt-conf.sh" --qemu-suffix -static --qemu-path "${q_dirname}" --persistent yes
+     elif which qemu-aarch64-user-bin > /dev/null 2>&1; then
+        q=$(which qemu-aarch64-user-bin); q_dirname=$(dirname "${q}")
+        [ -n "${q_dirname}" ] && \
+          ( for f in /proc/sys/fs/binfmt_misc/qemu-*; do [[ ! -e "${f}" ]] || echo '-1' | sudo tee "${f}" > /dev/null || exit 1; done ) && \
+          sudo "${d}/qemu-binfmt-conf.sh" --qemu-suffix -user-bin --qemu-path "${q_dirname}" --persistent yes
      elif which qemu-aarch64 > /dev/null 2>&1; then
         q=$(which qemu-aarch64); q_dirname=$(dirname "${q}")
         [ -n "${q_dirname}" ] && \
