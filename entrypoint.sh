@@ -415,18 +415,20 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       set -- "${LIGHTNINGD}" "${@}"
       # shellcheck disable=SC2046
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "set -x && exec ${*}" - lightning $(: core-lightning) &
-      LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -g LIGHTNINGD_RPC_SOCKET=""; declare -i T=$(( $(date '+%s') + 900))
+      LIGHTNINGD_PID=${!}; __info "Core Lightning starting..."; declare -g LIGHTNINGD_RPC_SOCKET=""; declare -i S=0 T=$(( $(date '+%s') + 900)) m=0 t=0
       while true; do
-        t=$(( T - $(date '+s') )); [[ ${t} -lt 10 ]] || t=10
+        [[ ${S} -gt 0 ]] || S=$(date '+%s'); t=$(( T - S )); [[ ${t} -lt 10 ]] || t=10
         i=$(inotifywait --event create,open --format '%f' --timeout ${t} --quiet "${NETWORK_DATA_DIRECTORY}")
         kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1 || __error "Failed to start Core Lightning."
         if [[ "${i}" == "lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break
         elif [[ -S "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]]; then LIGHTNINGD_RPC_SOCKET="${NETWORK_DATA_DIRECTORY}/lightning-rpc"; break; fi
-        [[ $(date '+%s') -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
-        [[ $(( (((T + 1 - $(date '+%s')) / 10) + 1) % 6 )) -ne 0 ]] || __info "Waiting for Core Lightning RPC socket, will wait $(( T - $(date '+%s') )) seconds more..."
+        S=$(date '+%s')
+        [[ ${S} -lt ${T} ]] || { __warning "Failed to get notification for Core Lightning RPC socket!"; break; }
+        [[ $(( S - m )) -lt 10 ]] || { m=${S}; __info "Waiting for Core Lightning RPC socket, will wait $(( T - S )) seconds more..."; }
       done
       LIGHTNINGD_REAL_PID=$(pgrep -P ${LIGHTNINGD_PID} | head -n 1)
       __info "Core Lightning started (PID: ${LIGHTNINGD_REAL_PID})"
+      unset S T i m t
 
       ### running of post-start scripts ###
       if [[ -d "${LIGHTNINGD_DATA}/.post-start.d" && $(find "${LIGHTNINGD_DATA}/.post-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
@@ -465,7 +467,8 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
           LIGHTNING_RUNE=$(grep -Po '(?<=^LIGHTNING_RUNE=")[^"]*(?=")' "${RTL_RUNE_PATH}") || \
           LIGHTNING_RUNE=""
         [[ "${RTL_RUNE_PATH:0:1}" == "/" ]] || RTL_RUNE_PATH="/tmp/RTL-rune"
-        if grep -q -E '<RTL-RUNE-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null || [[ -z "${LIGHTNING_RUNE}" ]]; then
+        if grep -q -E '<RTL-RUNE-PATH>' "${RTL_CONFIG_FILE}" 2>/dev/null || [[ -z "${LIGHTNING_RUNE}" ]] || [[ -n "${RTL_RUNE}" && "${RTL_RUNE}" != "${LIGHTNING_RUNE}" ]]; then
+          [[ -n "${RTL_RUNE}" ]] || [[ -z "${LIGHTNING_RUNE}" ]] || RTL_RUNE="${LIGHTNING_RUNE}"
           if __wait_for_rpc_liveness; then
             if [[ -z "${RTL_RUNE}" ]]; then
               declare -i RUNE_COUNT; RUNE_COUNT=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r '.runes | length')
@@ -485,12 +488,12 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               __info "Looking up rune for RTL (\#${RTL_RUNE})..."
               RTL_RUNE=$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" showrunes | jq -r --arg rune_id "${RTL_RUNE}" '.runes[] | select(.unique_id == $rune_id) | .rune')
               # shellcheck disable=SC2015
-              [[ -n "${RTL_RUNE}" ]] && __info " rune found." || __warning " FAILED to find specified rune!"
+              [[ -n "${RTL_RUNE}" ]] && __info "Rune found." || __warning "FAILED to find specified rune!"
             else
-              __info "Validating specified rune for RTL..."
-              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}") | jq -r '.runes[].rune' | head -n 1)" == "${RTL_RUNE}" ]] || RTL_RUNE='null'
+              __info "Validating set rune for RTL..."
+              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}" | jq -r '.runes[].rune' | head -n 1)" == "${RTL_RUNE}" ]] || RTL_RUNE='null'
               # shellcheck disable=SC2015
-              [[ "${RTL_RUNE}" != "null" ]] && __info " rune is valid." || __warning " FAILED to validate specified rune!"
+              [[ "${RTL_RUNE}" != "null" ]] && __info "Rune is valid." || __warning "FAILED to validate set rune!"
             fi
           else
             [[ -z "${RTL_RUNE}" || ! "${RTL_RUNE}" =~ ^[0-9][0-9]*$ ]] || RTL_RUNE='null'
@@ -510,9 +513,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
               LIGHTNING_RUNE=$(grep -Po '(?<=^LIGHTNING_RUNE=")[^"]*(?=")' "${RTL_RUNE_PATH}") || \
               LIGHTNING_RUNE=""
             # shellcheck disable=SC2015
+            [[ -n "${LIGHTNING_RUNE}" ]] && __info "Found rune in RTL configuration file." || __warning "No rune found in RTL configuration file."
+            # shellcheck disable=SC2015
             [[ -n "${LIGHTNING_RUNE}" ]] && \
-              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${RTL_RUNE}") | jq -r '.runes[].rune' | head -n 1)" == "${LIGHTNING_RUNE}" ]] && \
-              __info " Rune valid." || { __warning "Rune for RTL not set. Will hence not start RTL."; START_RTL="false"; }
+              [[ "$(lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" -k showrunes "rune=${LIGHTNING_RUNE}" | jq -r '.runes[].rune' | head -n 1)" == "${LIGHTNING_RUNE}" ]] && \
+              __info "Rune valid." || { __warning "Rune validation failed, will not start RTL."; START_RTL="false"; }
           else
             __warning "Could not validate rune for RTL because RPC socket failed to come live."
           fi
