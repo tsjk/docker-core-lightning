@@ -61,7 +61,7 @@ if [[ "${1}" == "lightningd" ]]; then
     __error "Refusing to start; \"${LIGHTNINGD_CONFIG_FILE}\" is zero-sized."
 
   if [[ -n "${LIGHTNINGD_NETWORK}" ]] && grep -q -E '^\s*network=\S+\s*(#.*)?$' "${LIGHTNINGD_CONFIG_FILE}"; then
-    sed -i -E 's@^\s*network=\S+(\s*#.*)@network='"${LIGHTNINGD_NETWORK}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+    sed -i -E 's@^\s*network=\S+(\s+#.*)@network='"${LIGHTNINGD_NETWORK}"'\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update network in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
   __info "Using Lightning network \"${LIGHTNINGD_NETWORK}\"."
@@ -199,11 +199,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   ### toggling of clboss ###
   if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
-           -Ee 's@^\s*#(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+           -Ee 's@^\s*#\s*(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" && \
+       grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to enable CLBOSS."
   elif [[ "${CLBOSS}" != "true" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
-           -Ee 's@^(\s*)clboss-+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+           -Ee 's@^\s*(clboss-.+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+       ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to disable CLBOSS."
   fi
 
