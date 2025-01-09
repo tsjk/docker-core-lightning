@@ -78,6 +78,26 @@ if [[ "${1}" == "lightningd" ]]; then
     sed -i 's@^bitcoin-rpcpassword=.*@bitcoin-rpcpassword='"${NETWORK_RPCD_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update bitcoin-rpcpassword in \"${LIGHTNINGD_CONFIG_FILE}\"."
   fi
+
+  ### setting of RPC details ###
+  [[ "${NETWORK_RPCD__NO_PROXY}" != "true" ]] || [[ -z "${NETWORK_RPCD}" ]] || {
+    NETWORK_RPCD_HOST="${NETWORK_RPCD%:*}"; NETWORK_RPCD_PORT="${NETWORK_RPCD#*:}"
+    [[ -n "${NETWORK_RPCD_HOST}" && -n "${NETWORK_RPCD_PORT}" ]] || __error "Failed to parse NETWORK_RPCD variable"
+    sed -i -e 's@^bitcoin-rpcconnect=.*@bitcoin-rpcconnect='"${NETWORK_RPCD_HOST}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update bitcoin-rpcconnect in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    sed -i -e 's@^bitcoin-rpcport=.*@bitcoin-rpcport='"${NETWORK_RPCD_PORT}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update bitcoin-rpcport in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  }
+
+  ### setting of tor details ###
+  [[ "${TOR_SOCKSD__NO_PROXY}" != "true" ]] || [[ -z "${TOR_SOCKSD}" ]] || {
+    sed -i -e 's@^proxy=.*@proxy='"${TOR_SOCKSD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update proxy in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  }
+  [[ "${TOR_SOCKSD__NO_PROXY}" != "true" ]] || [[ -z "${TOR_CTRLD}" ]] || {
+    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1'"${TOR_CTRLD}"'\3@' || \
+      __error "Failed to update addr=(statictor|autotor) in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  }
 fi
 
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
@@ -173,6 +193,25 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     fi
   fi
 
+  ### toggling of clboss ###
+  if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
+           -Ee 's@^\s*#\s*(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" && \
+       grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to enable CLBOSS."
+  elif [[ "${CLBOSS}" != "true" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
+    sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
+           -Ee 's@^\s*(clboss-.+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+       ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to disable CLBOSS."
+  fi
+
+  ### update of tor-service-password ###
+  if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
+    sed -i -E 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
+  fi
+
   ### execution of pre-start scripts ###
   if [[ -d "${LIGHTNINGD_DATA}/.pre-start.d" && $(find "${LIGHTNINGD_DATA}/.pre-start.d" -mindepth 1 -maxdepth 1 -type f -name '*.sh' | wc -l) -gt 0 ]]; then
     for f in "${LIGHTNINGD_DATA}/.pre-start.d"/*.sh; do
@@ -196,47 +235,42 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
     done
   fi
 
-  ### toggling of clboss ###
-  if [[ "${CLBOSS}" == "true" ]] && grep -q -E '^#plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
-    sed -i -e 's@^#plugin=/usr/local/bin/clboss$@plugin=/usr/local/bin/clboss@' \
-           -Ee 's@^\s*#\s*(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" && \
-       grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
-      __error "Failed to enable CLBOSS."
-  elif [[ "${CLBOSS}" != "true" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
-    sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
-           -Ee 's@^\s*(clboss-.+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
-       ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
-      __error "Failed to disable CLBOSS."
-  fi
-
-  ### update of tor-service-password ###
-  if [[ -n "${TOR_SERVICE_PASSWORD}" ]]; then
-    sed -i -E 's@^(#)?tor-service-password=.*@tor-service-password='"${TOR_SERVICE_PASSWORD}"'@' "${LIGHTNINGD_CONFIG_FILE}" || \
-      __error "Failed to update tor-service-password in \"${LIGHTNINGD_CONFIG_FILE}\"."
-  fi
-
   ### setup of socat proxies ###
   # shellcheck disable=SC2046
-  [[ -z "${NETWORK_RPCD}" ]] || { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 $(cat /tmp/socat-network_rpc.pid) > /dev/null 2>&1; } || {
+  [[ "${NETWORK_RPCD__NO_PROXY}" == "true" ]] || [[ -z "${NETWORK_RPCD}" ]] || {
+    sed -i -e 's@^bitcoin-rpcconnect=.*@bitcoin-rpcconnect=127.0.0.1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to reset bitcoin-rpcconnect in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    sed -i -e 's@^bitcoin-rpcport=.*@bitcoin-rpcport=8332@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to reset bitcoin-rpcport in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    { [[ -e /tmp/socat-network_rpc.lock ]] && [[ -e /tmp/socat-network_rpc.pid ]] && kill -0 $(cat /tmp/socat-network_rpc.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-network_rpc.lock /tmp/socat-network_rpc.pid
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-network_rpc.lock TCP4-LISTEN:8332,bind=127.0.0.1,reuseaddr,fork TCP4:${NETWORK_RPCD}" - lightning &
       echo $! > /tmp/socat-network_rpc.pid
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-network_rpc.pid) > /dev/null 2>&1 || __error "Failed to setup socat for crypto daemon's rpc service"; }
+  }
   # shellcheck disable=SC2046
-  [[ -z "${TOR_SOCKSD}" ]] || { [[ -e /tmp/socat-tor_socks.lock ]] && [[ -e /tmp/socat-tor_socks.pid ]] && kill -0 $(cat /tmp/socat-tor_socks.pid) > /dev/null 2>&1; } || {
+  [[ "${TOR_SOCKSD__NO_PROXY}" == "true" ]] || [[ -z "${TOR_SOCKSD}" ]] || {
+    sed -i -e 's@^proxy=.*@proxy=127.0.0.1:9050@' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to reset proxy in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    { [[ -e /tmp/socat-tor_socks.lock ]] && [[ -e /tmp/socat-tor_socks.pid ]] && kill -0 $(cat /tmp/socat-tor_socks.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_socks.lock /tmp/socat-tor_socks.pid
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_socks.lock TCP4-LISTEN:9050,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_SOCKSD}" - lightning &
       echo $! > /tmp/socat-tor_socks.pid
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_socks.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor SOCKS service"; }
+  }
   # shellcheck disable=SC2046
-  [[ -z "${TOR_CTRLD}" ]] || { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 $(cat /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1; } || {
+  [[ "${TOR_CTRLD__NO_PROXY}" == "true" ]] || [[ -z "${TOR_CTRLD}" ]] || {
+    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1127.0.0.1:9051\3@' || \
+      __error "Failed to reset addr=(statictor|autotor) in \"${LIGHTNINGD_CONFIG_FILE}\"."
+    { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 $(cat /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_ctrl.lock /tmp/socat-tor_ctrl.pid
       su -s /bin/sh -w "${SU_WHITELIST_ENV}" -c "exec /usr/bin/socat -L /tmp/socat-tor_ctrl.lock  TCP4-LISTEN:9051,bind=127.0.0.1,reuseaddr,fork TCP4:${TOR_CTRLD}" - lightning &
       echo $! > /tmp/socat-tor_ctrl.pid
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
+  }
 
   ### main run loop ###
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
