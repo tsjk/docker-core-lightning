@@ -164,10 +164,10 @@ ENV RUST_PROFILE=release \
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt
 
 # poetry
-RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSION} python${PYTHON_VERSION} -
+RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSION} python${PYTHON_VERSION} - && \
+      /root/.local/bin/poetry self add poetry-plugin-export
 
 RUN export PATH="/root/.local/bin:$PATH" && \
-      poetry self add poetry-plugin-export && \
       cd /tmp && \
       git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
       cd /tmp/lightning && \
