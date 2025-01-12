@@ -14,6 +14,7 @@ set -m
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
+declare -g __VERSION='v24.11.1-20250112'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -178,7 +179,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
           i+=1
           [[ ${i} -gt ${l} ]] || {
-            __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" (try ${i} of $${d}) - retrying in ${d} seconds..."
+            __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" (try ${i} of ${d}) - retrying in ${d} seconds..."
             sleep ${d}
           }
           PORT_FORWARDING_ADDRESS=''
@@ -262,7 +263,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   }
   # shellcheck disable=SC2046
   [[ "${TOR_CTRLD__NO_PROXY}" == "true" ]] || [[ -z "${TOR_CTRLD}" ]] || {
-    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1127.0.0.1:9051\3@' || \
+    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1127.0.0.1:9051\3@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to reset addr=(statictor|autotor) in \"${LIGHTNINGD_CONFIG_FILE}\"."
     { [[ -e /tmp/socat-tor_ctrl.lock ]] && [[ -e /tmp/socat-tor_ctrl.pid ]] && kill -0 $(cat /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1; } || {
       rm -f /tmp/socat-tor_ctrl.lock /tmp/socat-tor_ctrl.pid
@@ -276,7 +277,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container v24.11.1-20250103"
+    __info "This is Core Lightning container ${__VERSION}"
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     ### update of port forwarding address ###
