@@ -108,9 +108,7 @@ ENV LANG=en_US.UTF-8 \
 
 ENV PYTHON_VERSION=3 \
     PYTHON_VERSION_FULL=3.11 \
-    PIP_ROOT_USER_ACTION=ignore \
-    POETRY_VERSION=1.8.5 \
-    RUST_VERSION=1.82
+    PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -157,14 +155,18 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
       chmod 0755 "${SUEXEC_BINARY}"
 
 # rust
-ENV RUST_PROFILE=release \
+ENV RUST_VERSION=1.82 \
+    RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt
 
 # poetry
+ENV POETRY_VERSION=1.8.5 \
+    POETRY_PLUGIN_EXPORT_VERSION="^1.8.0"
+
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSION} python${PYTHON_VERSION} - && \
-      /root/.local/bin/poetry self add poetry-plugin-export
+      /root/.local/bin/poetry self add "poetry-plugin-export${POETRY_PLUGIN_EXPORT_VERSION}"
 
 RUN export PATH="/root/.local/bin:$PATH" && \
       cd /tmp && \
