@@ -87,8 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.11.1 \
-    CLBOSS_GIT_HASH=b6795c43dc646225902845c81c4a4df3fea532e7
+    LIGHTNINGD_VERSION=v24.11.1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -191,7 +190,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
       ( cd plugins/wss-proxy && poetry export -o requirements.txt --without-hashes )
 
 # CLBOSS
-COPY ./clboss-patches/ /tmp/clboss-patches/
+ARG CLBOSS_GIT_HASH=c4e56149b3f0887bb09f3158d17f2386ebd6c36c
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
@@ -201,11 +200,9 @@ RUN apt-get install -qq -y --no-install-recommends \
         libunwind-dev && \
       cd /tmp && \
       mkdir clboss && cd clboss && \
-      git init && git remote add origin https://github.com/ZmnSCPxj/clboss && \
+      git init && git remote add origin https://github.com/tsjk/clboss && \
       git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
       git checkout FETCH_HEAD && \
-      { [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -le 0 ] || \
-          ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ); } && \
       echo && autoreconf -f -i && \
       ./configure --prefix=/usr/local && \
       make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
