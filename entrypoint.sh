@@ -14,7 +14,7 @@ set -m
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
-declare -g __VERSION='v24.11.1-20250112'
+declare -g __VERSION='v24.11.1-20250114'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
