@@ -265,7 +265,6 @@ COPY --from=builder /tmp/lightning /tmp/lightning/
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt && \
       { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
       pip3 install --upgrade pip setuptools wheel && \
-      ( cd /tmp/lightning && pip3 install -r requirements.txt ) && \
       ( cd /tmp/lightning/plugins/clnrest && pip3 install -r requirements.txt ) && \
       ( cd /tmp/lightning/plugins/wss-proxy && pip3 install -r requirements.txt ) && \
       pip3 cache purge
