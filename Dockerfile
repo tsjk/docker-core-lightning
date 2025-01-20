@@ -192,6 +192,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
       ( cd plugins/wss-proxy && poetry export -o requirements.txt --without-hashes )
 
 # CLBOSS
+COPY ./clboss-patches/ /tmp/clboss-patches/
 ARG CLBOSS_GIT_HASH=c4e56149b3f0887bb09f3158d17f2386ebd6c36c
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
@@ -205,6 +206,8 @@ RUN apt-get install -qq -y --no-install-recommends \
       git init && git remote add origin https://github.com/tsjk/clboss && \
       git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
       git checkout FETCH_HEAD && \
+      { [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -le 0 ] || \
+          ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ); } && \
       echo && autoreconf -f -i && \
       ./configure --prefix=/usr/local && \
       make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
