@@ -96,7 +96,7 @@ if [[ "${1}" == "lightningd" ]]; then
       __error "Failed to update proxy in \"${LIGHTNINGD_CONFIG_FILE}\"."
   }
   [[ "${TOR_SOCKSD__NO_PROXY}" != "true" ]] || [[ -z "${TOR_CTRLD}" ]] || {
-    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1'"${TOR_CTRLD}"'\3@' || \
+    sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1'"${TOR_CTRLD}"'\3@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update addr=(statictor|autotor) in \"${LIGHTNINGD_CONFIG_FILE}\"."
   }
 fi
