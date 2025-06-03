@@ -87,7 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.11.1
+    LIGHTNINGD_VERSION=v24.11.2
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -193,7 +193,7 @@ RUN export PATH="/root/.local/bin:$PATH" && \
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=c4e56149b3f0887bb09f3158d17f2386ebd6c36c
+ARG CLBOSS_GIT_HASH=80983a7c78a89c55420639d66fe1cd25a758024d
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
@@ -218,7 +218,7 @@ RUN apt-get install -qq -y --no-install-recommends \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as python-builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.11.1
+    LIGHTNINGD_VERSION=v24.11.2
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -308,7 +308,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v24.11.1 \
+ARG LIGHTNINGD_VERSION=v24.11.2 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
