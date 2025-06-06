@@ -87,7 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.11.2
+    LIGHTNINGD_VERSION=v25.02.1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -113,10 +113,12 @@ ENV PYTHON_VERSION=3 \
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
         automake \
+        bison \
         build-essential \
         ca-certificates \
         curl \
         dirmngr \
+        flex \
         gettext \
         git \
         gnupg \
@@ -124,6 +126,7 @@ RUN apt-get install -qq -y --no-install-recommends \
         libc-dev\
         libev-dev \
         libevent-dev \
+        libicu-dev \
         libffi-dev \
         libgmp-dev \
         libpq-dev \
@@ -155,7 +158,7 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
       chmod 0755 "${SUEXEC_BINARY}"
 
 # rust
-ENV RUST_VERSION=1.82 \
+ENV RUST_VERSION=1.85.1 \
     RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
@@ -172,9 +175,9 @@ RUN export PATH="/root/.local/bin:$PATH" && \
       cd /tmp && \
       git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
       cd /tmp/lightning && \
+      poetry lock --no-update && \
       poetry export -o requirements.txt --without-hashes --with dev && \
       pip3 install -r requirements.txt && pip3 cache purge && \
-      poetry lock --no-update && \
       poetry install && \
       git reset --hard HEAD && \
       ./configure --prefix=/usr/local \
@@ -186,10 +189,10 @@ RUN export PATH="/root/.local/bin:$PATH" && \
         --enable-rust \
         --enable-static && \
       make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
+      poetry lock --no-update && \
       poetry run make DESTDIR=/tmp/lightning_install install && \
       poetry export -o requirements.txt --without-hashes --with dev && \
-      ( cd plugins/clnrest && poetry export -o requirements.txt --without-hashes ) && \
-      ( cd plugins/wss-proxy && poetry export -o requirements.txt --without-hashes )
+      ( cd plugins/wss-proxy && poetry lock --no-update && poetry export -o requirements.txt --without-hashes )
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -206,7 +209,7 @@ RUN apt-get install -qq -y --no-install-recommends \
       git init && git remote add origin https://github.com/tsjk/clboss && \
       git fetch --depth 1 origin ${CLBOSS_GIT_HASH} && \
       git checkout FETCH_HEAD && \
-      { [ $(ls -1 /tmp/clboss-patches/*.patch | wc -l) -le 0 ] || \
+      { [ $(ls -1 /tmp/clboss-patches/*.patch 2> /dev/null | wc -l) -le 0 ] || \
           ( for f in /tmp/clboss-patches/*.patch; do echo && echo "${f}:" && patch -p1 < ${f} || exit 1; done ); } && \
       echo && autoreconf -f -i && \
       ./configure --prefix=/usr/local && \
@@ -218,7 +221,7 @@ RUN apt-get install -qq -y --no-install-recommends \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as python-builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v24.11.2
+    LIGHTNINGD_VERSION=v25.02.1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -240,7 +243,7 @@ ENV LANG=en_US.UTF-8 \
 ENV PYTHON_VERSION=3 \
     PYTHON_VERSION_FULL=3.11 \
     PIP_ROOT_USER_ACTION=ignore \
-    RUST_VERSION=1.82
+    RUST_VERSION=1.85.1
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -265,7 +268,6 @@ COPY --from=builder /tmp/lightning /tmp/lightning/
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt && \
       { [ ! -f /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED ] || rm /usr/lib/python${PYTHON_VERSION_FULL}/EXTERNALLY-MANAGED; } && \
       pip3 install --upgrade pip setuptools wheel && \
-      ( cd /tmp/lightning/plugins/clnrest && pip3 install -r requirements.txt ) && \
       ( cd /tmp/lightning/plugins/wss-proxy && pip3 install -r requirements.txt ) && \
       pip3 cache purge
 
@@ -308,7 +310,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v24.11.2 \
+ARG LIGHTNINGD_VERSION=v25.02.1 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \

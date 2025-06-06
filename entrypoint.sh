@@ -14,7 +14,7 @@ set -m
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
-declare -g __VERSION='v24.11.2-20250603'
+declare -g __VERSION='v25.02.1-20250606'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -326,13 +326,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Failed to update clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E 's/^\s*#(clnrest-host=.*)$/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to update clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*(disable-plugin=clnrest\.py)\s*$/\#\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*(disable-plugin=clnrest)\s*$/\#\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
       # shellcheck disable=SC2015
       grep -q -E '^\s*clnrest-port=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
         grep -q -E '^\s*clnrest-protocol=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
         grep -q -E '^\s*clnrest-host=.+' "${LIGHTNINGD_CONFIG_FILE}" && \
-        ! grep -q -E '^\s*disable-plugin=clnrest\.py' "${LIGHTNINGD_CONFIG_FILE}" ||
+        ! grep -q -E '^\s*disable-plugin=clnrest' "${LIGHTNINGD_CONFIG_FILE}" ||
         __error "Failed to apply clnrest plugin configuration to \"${LIGHTNINGD_CONFIG_FILE}\"."
     else
       sed -i -E 's/^\s*(clnrest-port=.*)/\#\1/'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
@@ -341,13 +341,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __error "Failed to comment clnrest-protocol in \"${LIGHTNINGD_CONFIG_FILE}\"."
       sed -i -E 's/^\s*(clnrest-host=.*)/\#\1/'"${CLNREST_PORT}"'/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to comment clnrest-host in \"${LIGHTNINGD_CONFIG_FILE}\"."
-      sed -i -E 's/^\s*#(disable-plugin=clnrest\.py)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
+      sed -i -E 's/^\s*#(disable-plugin=clnrest)\s*/\1/' "${LIGHTNINGD_CONFIG_FILE}" || \
         __error "Failed to uncomment the disabling of the clnrest plugin in \"${LIGHTNINGD_CONFIG_FILE}\"."
       # shellcheck disable=SC2015
       ! grep -q -E '^\s*clnrest-port=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
         ! grep -q -E '^\s*clnrest-protocol=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
         ! grep -q -E '^\s*clnrest-host=.*' "${LIGHTNINGD_CONFIG_FILE}" && \
-        grep -q -E '^\s*disable-plugin=clnrest\.py' "${LIGHTNINGD_CONFIG_FILE}" ||
+        grep -q -E '^\s*disable-plugin=clnrest' "${LIGHTNINGD_CONFIG_FILE}" ||
         __error "Failed to apply clnrest plugin configuration to \"${LIGHTNINGD_CONFIG_FILE}\"."
       START_RTL="false"
     fi
