@@ -45,7 +45,7 @@ RUN { case ${TARGETPLATFORM} in \
     && chmod +x /tini
 
 # install bitcoin binaries
-ARG BITCOIN_VERSION=26.2
+ARG BITCOIN_VERSION=27.2
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
          "linux/arm64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
@@ -87,7 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v25.02.1
+    LIGHTNINGD_VERSION=v25.05rc1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -158,24 +158,24 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
       chmod 0755 "${SUEXEC_BINARY}"
 
 # rust
-ENV RUST_VERSION=1.85.1 \
+ENV RUST_VERSION=1.86.0 \
     RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=${RUST_VERSION} --component=rustfmt
 
 # poetry
-ENV POETRY_VERSION=1.8.5 \
-    POETRY_PLUGIN_EXPORT_VERSION="^1.8.0"
+ENV POETRY_VERSION=2.0.1 \
+    POETRY_PLUGIN_EXPORT_VERSION="^1.9.0"
 
 RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all-errors -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSION} python${PYTHON_VERSION} - && \
-      /root/.local/bin/poetry self add "poetry-plugin-export${POETRY_PLUGIN_EXPORT_VERSION}"
-
-RUN export PATH="/root/.local/bin:$PATH" && \
+      export PATH="/root/.local/bin:$PATH" && \
+      poetry self add "poetry-plugin-export${POETRY_PLUGIN_EXPORT_VERSION}" && \
       cd /tmp && \
-      git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning && \
+      { while ! GIT_HTTP_LOW_SPEED_LIMIT=131072 GIT_HTTP_LOW_SPEED_TIME=10 git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning; do \
+          rm -rf lightning; done; } && \
       cd /tmp/lightning && \
-      poetry lock --no-update && \
+      poetry lock && \
       poetry export -o requirements.txt --without-hashes --with dev && \
       pip3 install -r requirements.txt && pip3 cache purge && \
       poetry install && \
@@ -189,10 +189,10 @@ RUN export PATH="/root/.local/bin:$PATH" && \
         --enable-rust \
         --enable-static && \
       make -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-      poetry lock --no-update && \
+      poetry lock && \
       poetry run make DESTDIR=/tmp/lightning_install install && \
       poetry export -o requirements.txt --without-hashes --with dev && \
-      ( cd plugins/wss-proxy && poetry lock --no-update && poetry export -o requirements.txt --without-hashes )
+      ( cd plugins/wss-proxy && poetry lock && poetry export -o requirements.txt --without-hashes )
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -221,7 +221,7 @@ RUN apt-get install -qq -y --no-install-recommends \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as python-builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v25.02.1
+    LIGHTNINGD_VERSION=v25.05rc1
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -243,7 +243,7 @@ ENV LANG=en_US.UTF-8 \
 ENV PYTHON_VERSION=3 \
     PYTHON_VERSION_FULL=3.11 \
     PIP_ROOT_USER_ACTION=ignore \
-    RUST_VERSION=1.85.1
+    RUST_VERSION=1.86.0
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -310,7 +310,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v25.02.1 \
+ARG LIGHTNINGD_VERSION=v25.05rc1 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \

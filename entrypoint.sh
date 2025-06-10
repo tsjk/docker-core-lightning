@@ -14,7 +14,7 @@ set -m
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
-declare -g __VERSION='v25.02.1-20250606'
+declare -g __VERSION='v25.05rc1-20250610'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -27,14 +27,14 @@ __info() {
   if [[ "${1}" == "-q" ]]; then
     shift 1; echo "${*}"
   else
-    echo "entrypoint.sh[INFO]: ${*}"
+    echo "entrypoint.sh[INFO]: Core Lightning container ${__VERSION} - ${*}"
   fi
 }
 __warning() {
-  echo "entrypoint.sh[WARNING]: ${*}" >&2
+  echo "entrypoint.sh[WARNING]: Core Lightning container ${__VERSION} - ${*}" >&2
 }
 __error() {
-  echo "entrypoint.sh[ERROR]: ${*}" >&2; exit 1
+  echo "entrypoint.sh[ERROR]: Core Lightning container ${__VERSION} - ${*}" >&2; exit 1
 }
 
 if [[ -x "/usr/bin/lightningd" ]]; then
@@ -47,6 +47,7 @@ if [[ $(echo "$1" | cut -c1) == "-" ]]; then
   set -- lightningd "${@}"; fi
 
 if [[ "${1}" == "lightningd" ]]; then
+  __info "Base configuration phase starting..."
   # shellcheck disable=SC2155
   [[ -z "${*}" ]] || ! grep -q -E '(^|\s)--network=\S+(\s|$)' <<< "${*}" || \
     export LIGHTNINGD_NETWORK=$(grep -Po '(?<=--network\=)\S+(?=(\s|$))' <<< "${*}" | tail -n 1)
@@ -99,10 +100,12 @@ if [[ "${1}" == "lightningd" ]]; then
     sed -i -E '\@^addr=(statictor|autotor):@s@(addr=(statictor|autotor):).*(/.*|\s+#.*|$)@\1'"${TOR_CTRLD}"'\3@' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to update addr=(statictor|autotor) in \"${LIGHTNINGD_CONFIG_FILE}\"."
   }
+  __info "Base configuration phase ended."
 fi
 
 if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   shift 1
+  __info "Setup phase starting..."
 
   ### setting of uid and gid ###
   if [[ "${PUID}" =~ ^[0-9][0-9]*$ && "${PGID}" =~ ^[0-9][0-9]*$ ]]; then
@@ -272,12 +275,13 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
   }
+  __info "Setup phase ended."
 
   ### main run loop ###
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
   while [[ ${DO_RUN} -ne 0 ]]; do
-    __info "This is Core Lightning container ${__VERSION}"
+    __info "Preparation of Core Lightning running environment starting..."
     DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     ### update of port forwarding address ###
@@ -447,6 +451,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         /usr/local/bin/gossip-store-watcher.sh "${GOSSIP_STORE_WATCHER_ARGS[@]}" &
         GOSSIP_STORE_WATCHER_PID=${!}
       }
+      __info "Preparation of Core Lightning running environment ended."
 
       ### start of core lightning ###
       set -- "${LIGHTNINGD}" "${@}"
@@ -634,8 +639,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __info "Core Lightning container exiting."
       fi
     else
+      __info "Preparation of Core Lightning running environment ended."
       ### starting in foreground ###
+      __info "Executing Core Lightning...";
       ( set -x && su-exec lightning "${LIGHTNINGD}" "${@}" )
+      __info "Core Lightning exited.";
       ### clean-up of rpc socket ###
       [[ ! -e "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]] || rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
       DO_RUN=0
