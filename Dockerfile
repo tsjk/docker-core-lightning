@@ -87,7 +87,7 @@ RUN { case ${TARGETPLATFORM} in \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v25.05rc1
+    LIGHTNINGD_VERSION=v25.05
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -158,7 +158,7 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
       chmod 0755 "${SUEXEC_BINARY}"
 
 # rust
-ENV RUST_VERSION=1.86.0 \
+ENV RUST_VERSION=1.87.0 \
     RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=$PATH:/root/.cargo/bin
@@ -196,7 +196,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=80983a7c78a89c55420639d66fe1cd25a758024d
+ARG CLBOSS_GIT_HASH=44f53296b0c80c833f19351777eedeb75deb4585
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
@@ -221,7 +221,7 @@ RUN apt-get install -qq -y --no-install-recommends \
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:bookworm-slim as python-builder
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v25.05rc1
+    LIGHTNINGD_VERSION=v25.05
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -243,7 +243,7 @@ ENV LANG=en_US.UTF-8 \
 ENV PYTHON_VERSION=3 \
     PYTHON_VERSION_FULL=3.11 \
     PIP_ROOT_USER_ACTION=ignore \
-    RUST_VERSION=1.86.0
+    RUST_VERSION=1.87.0
 
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf \
@@ -310,7 +310,7 @@ RUN mkdir -p /tmp/RTL_install/usr/local && \
 # - final -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as final
 
-ARG LIGHTNINGD_VERSION=v25.05rc1 \
+ARG LIGHTNINGD_VERSION=v25.05 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
