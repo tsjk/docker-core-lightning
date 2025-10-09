@@ -196,7 +196,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=44f53296b0c80c833f19351777eedeb75deb4585
+ARG CLBOSS_GIT_HASH=6cd20cba3ad15380e710d87007409a7b83743d8c
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
@@ -274,7 +274,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 # - node builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
 
-ARG RTL_VERSION=0.15.4
+ARG RTL_VERSION=0.15.6
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
       echo 'Etc/UTC' > /etc/timezone && \
