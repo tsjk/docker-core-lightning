@@ -14,7 +14,7 @@ set -m
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
 
-declare -g __VERSION='v25.05-20251204'
+declare -g __VERSION='v25.05-20251211'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -181,7 +181,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         PORT_FORWARDING_ADDRESS=$(get_forwarding_address | tr -d '\r')
         echo "${PORT_FORWARDING_ADDRESS}" | grep -q -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[1-9][0-9]*$' || {
           i+=1
-          [[ ${i} -gt ${l} ]] || {
+          [[ ${i} -ge ${l} ]] || {
             __warning "get_forwarding_address() returned invalid address \"${PORT_FORWARDING_ADDRESS}\" (try ${i} of ${l}) - retrying in ${d} seconds..."
             sleep ${d}
           }
