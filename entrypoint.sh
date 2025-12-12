@@ -13,8 +13,9 @@ set -m
 : "${EXPOSE_TCP_RPC:=false}"
 : "${SU_WHITELIST_ENV:=PYTHONPATH}"
 : "${OFFLINE:=false}"
+: "${WAIT_AFTER_CLN_TERMINATION:=false}"
 
-declare -g __VERSION='v25.05-20251211'
+declare -g __VERSION='v25.05-20251212'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -280,9 +281,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
   ### main run loop ###
   declare -g -i LIGHTNINGD_PID=0 LIGHTNINGD_REAL_PID=0 LIGHTNINGD_RPC_SOCAT_PID=0 GOSSIP_STORE_WATCHER_PID=0 RTL_PID=0
   declare -g -a LIGHTNINGD_ARGS=("${@}")
-  while [[ ${DO_RUN} -ne 0 ]]; do
+  while [[ ${DO_RUN} -gt 0 ]]; do
     __info "Preparation of Core Lightning running environment starting..."
-    DO_RUN=0; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
+    DO_RUN=-1; set -- "${LIGHTNINGD_ARGS[@]}"; rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
     ### update of port forwarding address ###
     if [[ "${PORT_FORWARDING}" == "true" && -n "${PORT_FORWARDING_ADDRESS}" ]]; then
@@ -408,7 +409,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __sigterm_handler() {
           __info "SIGTERM received"
           if mkdir "${_SIGTERM_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
-            if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
+            if [[ ${LIGHTNINGD_REAL_PID} -eq 0 && ${LIGHTNINGD_PID} -ne 0 && "$(cat "/proc/${LIGHTNINGD_PID}/comm")" == "sleep" ]]; then
+              DO_RUN=0; kill ${LIGHTNINGD_PID}; LIGHTNINGD_PID=0
+            elif [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
               __warning "SIGTERM not handled; location of Core Lightning RPC socket is unknown."
             elif ! which lightning-cli > /dev/null 2>&1; then
               __warning "SIGTERM not handled; location of Core Lightning CLI is unknown."
@@ -428,7 +431,9 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
         __sighup_handler() {
           __info "SIGHUP received"
           if mkdir "${_SIGHUP_HANDLER_LOCK}/lock" > /dev/null 2>&1; then
-            if [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
+            if [[ ${LIGHTNINGD_REAL_PID} -eq 0 && ${LIGHTNINGD_PID} -ne 0 && "$(cat "/proc/${LIGHTNINGD_PID}/comm")" == "sleep" ]]; then
+              DO_RUN=1; kill ${LIGHTNINGD_PID}; LIGHTNINGD_PID=0
+            elif [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]]; then
               __warning "SIGHUP not handled; location of Core Lightning RPC socket is unknown."
             elif ! which lightning-cli > /dev/null 2>&1; then
               __warning "SIGHUP not handled; location of Core Lightning CLI is unknown."
@@ -608,7 +613,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       ### normal mode ###
       __info "Entering normal run mode (PIDs: ${LIGHTNINGD_PID} <- ${LIGHTNINGD_REAL_PID})."
       while kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
-      __info "Exited normal run mode."
+      LIGHTNINGD_PID=0; __info "Exited normal run mode."
       if kill -0 "${LIGHTNINGD_REAL_PID}" > /dev/null 2>&1; then
         __warning "Core Lightning Daemon is still running after normal run mode exited!"
          [[ -z "${LIGHTNINGD_RPC_SOCKET}" ]] || ! which lightning-cli > /dev/null 2>&1 || lightning-cli --rpc-file="${LIGHTNINGD_RPC_SOCKET}" stop
@@ -631,7 +636,14 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       ### clean-up of rpc socket ###
       [[ ! -e "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]] || rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
-      if [[ ${DO_RUN} -ne 0 ]]; then
+      if [[ ${DO_RUN} -lt 0 && "${WAIT_AFTER_CLN_TERMINATION}" == "true" ]]; then
+        __info "Waiting for signals..."
+        sleep infinity &
+        LIGHTNINGD_PID=${!}
+        while kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
+      fi
+
+      if [[ ${DO_RUN} -gt 0 ]]; then
         sleep 5
         __info "Core Lightning restart initiated."
       else
