@@ -276,6 +276,7 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       # shellcheck disable=SC2046
       kill -0 $(< /tmp/socat-tor_ctrl.pid) > /dev/null 2>&1 || __error "Failed to setup socat for Tor control service"; }
   }
+  rm -f "/tmp/cln-shutdown"
   __info "Setup phase ended."
 
   ### main run loop ###
@@ -636,11 +637,11 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
       ### clean-up of rpc socket ###
       [[ ! -e "${NETWORK_DATA_DIRECTORY}/lightning-rpc" ]] || rm -f "${NETWORK_DATA_DIRECTORY}/lightning-rpc"
 
-      if [[ ${DO_RUN} -lt 0 && "${WAIT_AFTER_CLN_TERMINATION}" == "true" ]]; then
+      if [[ "${WAIT_AFTER_CLN_TERMINATION}" == "true" && ${DO_RUN} -lt 0 && ! -f "/tmp/cln-shutdown" ]]; then
         __info "Waiting for signals..."
         sleep infinity &
         LIGHTNINGD_PID=${!}
-        while kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
+        while [[ ${LIGHTNINGD_PID} -gt 0 ]] && kill -0 ${LIGHTNINGD_PID} > /dev/null 2>&1; do wait ${LIGHTNINGD_PID}; done
       fi
 
       if [[ ${DO_RUN} -gt 0 ]]; then
