@@ -45,7 +45,7 @@ RUN { case ${TARGETPLATFORM} in \
     && chmod +x /tini
 
 # install bitcoin binaries
-ARG BITCOIN_VERSION=27.2
+ARG BITCOIN_VERSION=28.4
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz  ;; \
          "linux/arm64")   BITCOIN_TARBALL=bitcoin-${BITCOIN_VERSION}-aarch64-linux-gnu.tar.gz  ;; \
@@ -64,17 +64,17 @@ RUN { case ${TARGETPLATFORM} in \
     && rm ${BITCOIN_TARBALL} SHA256SUMS ${BITCOIN_TARBALL}.sha256sum
 
 # install litecoin binaries
-ENV LITECOIN_VERSION=0.21.4
+ENV LITECOIN_VERSION=0.21.5.2
 RUN { case ${TARGETPLATFORM} in \
          "linux/amd64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=857fc41091f2bae65c3bf0fd4d388fca915fc93a03f16dd2578ac3cc92898390  ;; \
+                          LITECOIN_SHA256=3d7bd13f2ad2671b2c48b2d99c2dbdf10e5cf2746cbf982822623e009d7f24c1  ;; \
          "linux/arm64")   LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-aarch64-linux-gnu.tar.gz; \
-                          LITECOIN_SHA256=517e3a9069e658eb92de98c934c61836589ee2410d99464a768a5698985926c9  ;; \
+                          LITECOIN_SHA256=656e8d6747451fab0bd1de2bcfbe691ad081b4c4add807904a5c48b1310a09dd  ;; \
          "linux/arm32v7") LITECOIN_TARBALL=litecoin-${LITECOIN_VERSION}-arm-linux-gnueabihf.tar.gz; \
-                          LITECOIN_SHA256=84fd40aff5f6ed745518c736e379900d6bf4e1197d7329e57c39e21c0f36137d  ;; \
+                          LITECOIN_SHA256=296beda11e1cdbab90b16b3dd3319ee8e98fb99e93c2d8913ffb3293343b118f  ;; \
          *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1  ;; \
       esac; } \
-    && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/${LITECOIN_TARBALL} \
+    && LITECOIN_URL=https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/${LITECOIN_TARBALL} \
     && mkdir /opt/litecoin && cd /opt/litecoin \
     && wget -q --timeout=60 --waitretry=0 --tries=8 -O ${LITECOIN_TARBALL} "${LITECOIN_URL}" \
     && echo "${LITECOIN_SHA256}  ${LITECOIN_TARBALL}" | sha256sum -c - \
@@ -196,7 +196,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=c82fece4114c8a4663d470341752529610f8c51b
+ARG CLBOSS_GIT_HASH=90c8eba5f1b9d448a0d8da34686f328874a253e0
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
@@ -274,7 +274,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 # - node builder -
 FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:20-bookworm-slim as node-builder
 
-ARG RTL_VERSION=0.15.6
+ARG RTL_VERSION=0.15.8
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && \
       echo 'Etc/UTC' > /etc/timezone && \
