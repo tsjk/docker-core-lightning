@@ -196,7 +196,7 @@ RUN curl --connect-timeout 5 --max-time 15 --retry 8 --retry-delay 0 --retry-all
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=90c8eba5f1b9d448a0d8da34686f328874a253e0
+ARG CLBOSS_GIT_HASH=f2bb2d8c575a5ecb02354d974e812e4bda1626c2
 RUN apt-get install -qq -y --no-install-recommends \
         autoconf-archive \
         dnsutils \
