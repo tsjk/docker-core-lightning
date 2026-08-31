@@ -15,7 +15,7 @@ set -m
 : "${OFFLINE:=false}"
 : "${WAIT_AFTER_CLN_TERMINATION:=false}"
 
-declare -g __VERSION='v26.06.6-20260831'
+declare -g __VERSION='v26.06.7-20260831'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)

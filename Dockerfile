@@ -93,7 +93,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:trixie-slim as builde
 ARG TARGETPLATFORM
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v26.06.6
+    LIGHTNINGD_VERSION=v26.06.7-binary
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -187,47 +187,82 @@ RUN mkdir /tmp/su-exec && cd /tmp/su-exec && \
 # Core Lightning
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    { case ${TARGETPLATFORM} in \
-        "linux/amd64")   COPTFLAGS="-O2 -march=x86-64";                                   TARGET_ARCH="x86_64-linux-gnu";    RUST_ARCH="x86_64-unknown-linux-gnu"; ;; \
-        "linux/arm64")   COPTFLAGS="-O2 -march=armv8-a";                                  TARGET_ARCH="aarch64-linux-gnu";   RUST_ARCH="aarch64-unknown-linux-gnu"; ;; \
-        "linux/arm32v7") COPTFLAGS="-O2 -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard"; TARGET_ARCH="arm-linux-gnueabihf"; RUST_ARCH="armv7-unknown-linux-gnueabihf"; ;; \
-        *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1;  ;; \
-      esac; \
-    } && \
-      export PKG_CONFIG_LIBDIR="/usr/lib/${TARGET_ARCH}/pkgconfig" PKG_CONFIG_PATH="/usr/lib/${TARGET_ARCH}/pkgconfig" && \
-      STRIP_BINARY="${TARGET_ARCH}-strip" && \
-      cd /tmp && \
-      { while ! GIT_HTTP_LOW_SPEED_LIMIT=131072 GIT_HTTP_LOW_SPEED_TIME=10 git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning; do \
-          rm -rf lightning; done; } && \
+    if ! echo "${LIGHTNINGD_VERSION}" | grep -q -E '.*-binary$'; then \
+      { case ${TARGETPLATFORM} in \
+          "linux/amd64")   COPTFLAGS="-O2 -march=x86-64";                                   TARGET_ARCH="x86_64-linux-gnu";    RUST_ARCH="x86_64-unknown-linux-gnu"; ;; \
+          "linux/arm64")   COPTFLAGS="-O2 -march=armv8-a";                                  TARGET_ARCH="aarch64-linux-gnu";   RUST_ARCH="aarch64-unknown-linux-gnu"; ;; \
+          "linux/arm32v7") COPTFLAGS="-O2 -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard"; TARGET_ARCH="arm-linux-gnueabihf"; RUST_ARCH="armv7-unknown-linux-gnueabihf"; ;; \
+          *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1;  ;; \
+        esac; \
+      } && \
+        export PKG_CONFIG_LIBDIR="/usr/lib/${TARGET_ARCH}/pkgconfig" PKG_CONFIG_PATH="/usr/lib/${TARGET_ARCH}/pkgconfig" && \
+        STRIP_BINARY="${TARGET_ARCH}-strip" && \
+        cd /tmp && \
+        { while ! GIT_HTTP_LOW_SPEED_LIMIT=131072 GIT_HTTP_LOW_SPEED_TIME=10 git clone --recursive --depth 1 --branch ${LIGHTNINGD_VERSION} https://github.com/ElementsProject/lightning; do \
+            rm -rf lightning; done; } && \
+        cd /tmp/lightning && \
+        mkdir ./.cargo && \
+        printf '[build]\ntarget = "%s"\nrustflags = ["-C", "target-cpu=generic"]\n\n[target.%s]\nlinker = "%s-gcc"\n' "${RUST_ARCH}" "${RUST_ARCH}" "${TARGET_ARCH}" > ./.cargo/config.toml && \
+        sed -e 's/^\t\$(INSTALL_DATA) \(\$([^)]\+)\).*$/ifneq (\1,)\n\0\nendif/' -i Makefile && \
+        sed -e '/^PLUGINS += \$(RUST_PLUGINS)$/a\\nrust-plugins : $(RUST_PLUGINS)\n.PHONY : rust-plugins' -i plugins/Makefile && \
+        set -x && \
+        uv sync --all-extras --all-groups --frozen && \
+        ./configure --prefix=/usr/local \
+          --disable-address-sanitizer \
+          --disable-compat \
+          --disable-fuzzing \
+          --disable-ub-sanitize \
+          --disable-valgrind \
+          --enable-rust \
+          --enable-static && \
+        uv run make \
+         COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
+         -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
+        uv run make \
+         COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
+         -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) cln-rpc-all cln-grpc-all && \
+        COPTFLAGS="${COPTFLAGS}" cargo build --release --target="${RUST_ARCH}" && \
+        make \
+         COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
+         -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) rust-plugins && \
+        uv run make \
+         COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
+         DESTDIR=/tmp/lightning_install install && \
+        find /tmp/lightning_install/ -type f -executable -exec file {} + | awk -F: '/ELF/ { print $1 }' | xargs -n 1 -r -t ${STRIP_BINARY} --strip-unneeded; \
+   else \
+      CLN_TARBALL="clightning-${LIGHTNINGD_VERSION%-binary}" && \
+      INTEGRITY_FILE="SHA256SUMS-${LIGHTNINGD_VERSION%-binary}" && \
+      { case ${TARGETPLATFORM} in \
+          "linux/amd64")   CLN_TARBALL="${CLN_TARBALL}-Ubuntu-24.04-amd64.tar.xz"; ;; \
+          "linux/arm64")   CLN_TARBALL="${CLN_TARBALL}-Ubuntu-24.04-arm64.tar.xz"; INTEGRITY_FILE="${INTEGRITY_FILE}-arm64"; ;; \
+          *) echo "ERROR: Unsupported TARGETPLATFORM: ${TARGETPLATFORM}."; exit 1;  ;; \
+        esac; \
+      } && \
+      { for key in \
+          4E4A142F8BD3C38A56B362ED578CAC08472545C5 \
+          B731AAC521B013859313F674A26D6D9FE088ED58 \
+          653B19F33DF7EFF3E9D1C94CC3F21EE387FF4CD2 \
+          8A079421A871D0B1083511937AB4802ED5A639F3 \
+         ; do \
+             gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$key" || \
+             gpg --batch --keyserver hkps://api.protonmail.ch --recv-keys "$key" || \
+             gpg --batch --keyserver keys.openpgp.org --recv-keys "$key" || \
+             gpg --batch --keyserver keyserver.pgp.com --recv-keys "$key" || \
+             gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys "$key" || \
+             gpg --batch --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys "$key" ; \
+        done; } && \
+      CLN_TARBALL_URL="https://github.com/ElementsProject/lightning/releases/download/${LIGHTNINGD_VERSION%-binary}/${CLN_TARBALL}" && \
+      INTEGRITY_FILE_URL="https://github.com/ElementsProject/lightning/releases/download/${LIGHTNINGD_VERSION%-binary}/${INTEGRITY_FILE}" && \
+      mkdir -p /tmp/lightning && \
       cd /tmp/lightning && \
-      mkdir ./.cargo && \
-      printf '[build]\ntarget = "%s"\nrustflags = ["-C", "target-cpu=generic"]\n\n[target.%s]\nlinker = "%s-gcc"\n' "${RUST_ARCH}" "${RUST_ARCH}" "${TARGET_ARCH}" > ./.cargo/config.toml && \
-      sed -e 's/^\t\$(INSTALL_DATA) \(\$([^)]\+)\).*$/ifneq (\1,)\n\0\nendif/' -i Makefile && \
-      sed -e '/^PLUGINS += \$(RUST_PLUGINS)$/a\\nrust-plugins : $(RUST_PLUGINS)\n.PHONY : rust-plugins' -i plugins/Makefile && \
-      set -x && \
-      uv sync --all-extras --all-groups --frozen && \
-      ./configure --prefix=/usr/local \
-        --disable-address-sanitizer \
-        --disable-compat \
-        --disable-fuzzing \
-        --disable-ub-sanitize \
-        --disable-valgrind \
-        --enable-rust \
-        --enable-static && \
-      uv run make \
-       COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
-       -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) && \
-      uv run make \
-       COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
-       -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) cln-rpc-all cln-grpc-all && \
-      COPTFLAGS="${COPTFLAGS}" cargo build --release --target="${RUST_ARCH}" && \
-      make \
-       COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
-       -j$( [ ${MAKE_NPROC} -gt 0 ] && echo ${MAKE_NPROC} || nproc) rust-plugins && \
-      uv run make \
-       COVERAGE="" ALL_TEST_PROGRAMS="" ALL_FUZZ_TARGETS="" DEVTOOLS="" COPTFLAGS="${COPTFLAGS}" RUST_PROFILE="release" TARGET="${RUST_ARCH}" CARGO_OPTS="--release --target=${RUST_ARCH}" CLN_RPC_EXAMPLES="" CLN_GRPC_EXAMPLES="" CLN_PLUGIN_EXAMPLES="" CLNREST_EXAMPLES="" \
-       DESTDIR=/tmp/lightning_install install && \
-      find /tmp/lightning_install/ -type f -executable -exec file {} + | awk -F: '/ELF/ { print $1 }' | xargs -n 1 -r -t ${STRIP_BINARY} --strip-unneeded
+      wget --timeout=60 --waitretry=0 --tries=8 -O "${CLN_TARBALL}" "${CLN_TARBALL_URL}" && \
+      wget --timeout=60 --waitretry=0 --tries=8 -O "${INTEGRITY_FILE}" "${INTEGRITY_FILE_URL}" && \
+      wget --timeout=60 --waitretry=0 --tries=8 -O "${INTEGRITY_FILE}.asc" "${INTEGRITY_FILE_URL}.asc" && \
+      gpg --verify "${INTEGRITY_FILE}.asc" "${INTEGRITY_FILE}" && \
+      sha256sum -c  "${INTEGRITY_FILE}" --ignore-missing && \
+      mkdir -p /tmp/lightning_install/usr/local && \
+      tar -C /tmp/lightning_install/usr/local --strip-components=2 -xvf "${CLN_TARBALL}"; \
+   fi;
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
@@ -324,7 +359,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as final
 
 ARG TARGETPLATFORM
 
-ARG LIGHTNINGD_VERSION=v26.06.6 \
+ARG LIGHTNINGD_VERSION=v26.06.7-binary \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
@@ -355,7 +390,9 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-COPY --from=builder /tmp/lightning/ /tmp/lightning/
+COPY --from=builder /tmp/su-exec_install/ /
+COPY --from=builder /tmp/lightning_install/ /
+COPY --from=builder /tmp/clboss_install/ /
 COPY --from=node-builder /tmp/RTL_install/ /
 
 ENV PYTHON_VERSION=3 \
@@ -417,7 +454,10 @@ RUN --mount=type=cache,target=/var/cache/apt \
     chown -R -h lightning:lightning "${LIGHTNINGD_HOME}" && \
     mkdir "${LIGHTNINGD_DATA}" && \
     chown -R -h lightning:lightning "${LIGHTNINGD_DATA}" && \
-    rm -rf /tmp/*
+    rm -rf /tmp/* && \
+    { if find /usr/local/ -type f -executable -exec ldd {} + 2>&1 | grep -q -E ' => not found$'; then \
+        find /usr/local/ -type f -executable -exec ldd {} + 2>&1; exit 1; \
+      fi; };
 
 COPY ./entrypoint.sh /entrypoint.sh
 COPY ./gossip-store-watcher.sh /usr/local/bin/gossip-store-watcher.sh
@@ -426,9 +466,6 @@ RUN chmod 0755 /entrypoint.sh && \
       chmod 0755 /usr/local/bin/gossip-store-watcher.sh && \
       chown -R -h lightning:lightning "${LIGHTNINGD_HOME}"
 
-COPY --from=builder /tmp/su-exec_install/ /
-COPY --from=builder /tmp/lightning_install/ /
-COPY --from=builder /tmp/clboss_install/ /
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY --from=downloader "/tini" /usr/bin/tini
