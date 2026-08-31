@@ -15,7 +15,7 @@ set -m
 : "${OFFLINE:=false}"
 : "${WAIT_AFTER_CLN_TERMINATION:=false}"
 
-declare -g __VERSION='v25.05-20260518'
+declare -g __VERSION='v26.06.6-20260831'
 declare -g -i DO_RUN=1
 declare -g -i SETUP_SIGNAL_HANDLERS=1
 declare -g _SIGHUP_HANDLER_LOCK; _SIGHUP_HANDLER_LOCK=$(mktemp -d)
@@ -204,11 +204,19 @@ if [[ "${1}" == "${LIGHTNINGD}" ]]; then
            -Ee 's@^\s*#\s*(clboss-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" && \
        grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to enable CLBOSS."
+    sed -i -e 's@^#plugin=/usr/local/bin/xrebalance$@plugin=/usr/local/bin/xrebalance@' \
+           -Ee 's@^\s*#\s*(xrebalance-.+=.+)$@\1@' "${LIGHTNINGD_CONFIG_FILE}" && \
+       grep -q -E '^plugin=/usr/local/bin/xrebalance$' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to enable XREBALANCE."
   elif [[ "${CLBOSS}" != "true" ]] && grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}"; then
     sed -i -e 's@^plugin=/usr/local/bin/clboss$@#plugin=/usr/local/bin/clboss@' \
            -Ee 's@^\s*(clboss-.+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
        ! grep -q -E '^plugin=/usr/local/bin/clboss$' "${LIGHTNINGD_CONFIG_FILE}" || \
       __error "Failed to disable CLBOSS."
+    sed -i -e 's@^plugin=/usr/local/bin/xrebalance$@#plugin=/usr/local/bin/xrebalance@' \
+           -Ee 's@^\s*(xrebalance-.+=.+)@\#\1@' "${LIGHTNINGD_CONFIG_FILE}" || \
+       ! grep -q -E '^plugin=/usr/local/bin/xrebalance$' "${LIGHTNINGD_CONFIG_FILE}" || \
+      __error "Failed to disable XREBALANCE."
   fi
 
   ### update of tor-service-password ###
