@@ -93,7 +93,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:trixie-slim as builde
 ARG TARGETPLATFORM
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v26.06.7-binary
+    LIGHTNINGD_VERSION=v26.06.7
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -266,8 +266,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=4f6c460b51014faf3926bec693d147e06ab7f1a3 \
-      XREBALANCE_VERSION=v0.4.6
+ARG CLBOSS_GIT_HASH=92800d2c5d6767d571475443cf5a2e1948a08287 \
+      XREBALANCE_VERSION=v0.4.7
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
@@ -315,7 +315,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as node-
 
 ARG TARGETPLATFORM
 
-ARG RTL_VERSION=0.15.11
+ARG RTL_VERSION=0.15.12
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -359,7 +359,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as final
 
 ARG TARGETPLATFORM
 
-ARG LIGHTNINGD_VERSION=v26.06.7-binary \
+ARG LIGHTNINGD_VERSION=v26.06.7 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
