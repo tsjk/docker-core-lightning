@@ -93,7 +93,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} debian:trixie-slim as builde
 ARG TARGETPLATFORM
 
 ARG MAKE_NPROC=0 \
-    LIGHTNINGD_VERSION=v26.06.8
+    LIGHTNINGD_VERSION=v26.06.9
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -168,7 +168,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
         pip3 install --resume-retries 128 uv
 
 # rust
-ENV RUST_VERSION=1.98.1 \
+ENV RUST_VERSION=1.99.0 \
     RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=${PATH}:/root/.cargo/bin
@@ -315,7 +315,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as node-
 
 ARG TARGETPLATFORM
 
-ARG RTL_VERSION=0.15.12
+ARG RTL_VERSION=0.15.13
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -359,7 +359,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as final
 
 ARG TARGETPLATFORM
 
-ARG LIGHTNINGD_VERSION=v26.06.8 \
+ARG LIGHTNINGD_VERSION=v26.06.9 \
     LIGHTNINGD_UID=1001
 ENV LIGHTNINGD_HOME=/home/lightning
 ENV LIGHTNINGD_DATA=${LIGHTNINGD_HOME}/.lightning \
