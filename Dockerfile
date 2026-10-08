@@ -266,8 +266,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=92800d2c5d6767d571475443cf5a2e1948a08287 \
-      XREBALANCE_VERSION=v0.4.7
+ARG CLBOSS_GIT_HASH=f2125646e9c0fa25446730219b2d9c2e4f0621c7 \
+      XREBALANCE_VERSION=v0.4.8
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
