@@ -168,7 +168,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
         pip3 install --resume-retries 128 uv
 
 # rust
-ENV RUST_VERSION=1.99.0 \
+ENV RUST_VERSION=1.99.1 \
     RUST_PROFILE=release \
     CARGO_OPTS=--profile=release \
     PATH=${PATH}:/root/.cargo/bin
@@ -266,7 +266,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 
 # CLBOSS
 COPY ./clboss-patches/ /tmp/clboss-patches/
-ARG CLBOSS_GIT_HASH=f2125646e9c0fa25446730219b2d9c2e4f0621c7 \
+ARG CLBOSS_GIT_HASH=48e0515cfcfe7163270c41957f021362d2af3a80 \
       XREBALANCE_VERSION=v0.4.8
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/root/.cargo/registry \
@@ -315,7 +315,7 @@ FROM --platform=${TARGETPLATFORM:-${BUILDPLATFORM}} node:26-trixie-slim as node-
 
 ARG TARGETPLATFORM
 
-ARG RTL_VERSION=0.15.13
+ARG RTL_VERSION=0.15.15
 
 ENV DEBIAN_FRONTEND noninteractive
 
